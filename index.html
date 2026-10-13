@@ -40,6 +40,15 @@ body{margin:0;background:var(--bezel);color:var(--ink);font-family:var(--f-displ
   width:min(100%, calc((100dvh - 290px) * 256 / 240 + 12px));max-width:100%;box-sizing:border-box}
 .cab::after{content:"";position:absolute;inset:6px;pointer-events:none;background:repeating-linear-gradient(to bottom,rgba(0,0,0,.09) 0 1px,transparent 1px 3px);box-shadow:inset 0 0 22px rgba(0,0,0,.5)}
 #screen{display:block;width:100%;aspect-ratio:256/240;image-rendering:pixelated;image-rendering:crisp-edges;background:#000}
+.keys{display:none;flex-wrap:wrap;justify-content:center;gap:8px 18px;font-size:9px;color:var(--dim);letter-spacing:.04em;max-width:100%}
+.keys span{display:flex;align-items:center;gap:4px;white-space:nowrap}
+kbd{font:inherit;font-size:9px;color:var(--ink);background:var(--deck);border-radius:4px;padding:3px 5px;box-shadow:inset 0 -2px 0 #0b0a10,0 0 0 1px var(--deck-hi)}
+@media (hover:hover) and (pointer:fine){
+  .app{max-width:960px}
+  .app .deck{display:none}
+  .keys{display:flex}
+  .cab{width:min(100%, calc((100dvh - 150px) * 256 / 240 + 12px))}
+}
 .hint{margin:0;min-height:2.6em;font-size:9px;line-height:1.45;color:var(--dim);text-align:center;letter-spacing:.04em;max-width:40ch;text-wrap:balance}
 .deck{width:100%;flex:1 1 auto;min-height:200px;max-height:300px;background:var(--deck);border-radius:14px 14px 28px 28px;
   box-shadow:inset 0 2px 0 var(--deck-hi), 0 4px 0 #0b0a10;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;
@@ -76,6 +85,13 @@ body{margin:0;background:var(--bezel);color:var(--ink);font-family:var(--f-displ
 <main class="app">
   <div class="cab"><canvas id="screen" width="512" height="480" aria-label="Diamond '88 game screen"></canvas></div>
   <p class="hint" id="hint" aria-live="polite"></p>
+  <div class="keys" aria-label="Keyboard controls">
+    <span><kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> or <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move</span>
+    <span><kbd>X</kbd> or <kbd>Space</kbd> A: swing, pitch, run</span>
+    <span><kbd>Z</kbd> B: bunt, hold</span>
+    <span><kbd>Enter</kbd> start/pause</span>
+    <span><kbd>M</kbd> sound</span>
+  </div>
   <div class="deck">
     <div class="dpad" id="dpad" aria-label="Direction pad">
       <i class="h"></i><i class="v"></i><i class="dot"></i>
@@ -154,7 +170,12 @@ function dpadOff(){ ['up','down','left','right'].forEach(k=>setKey(k,0)); dpad.d
 dpad.addEventListener('pointerdown',e=>{e.preventDefault(); try{dpad.setPointerCapture(e.pointerId);}catch(_){} dpadAt(e);});
 dpad.addEventListener('pointermove',e=>{ if(e.buttons||e.pointerType==='touch') dpadAt(e); });
 ['pointerup','pointercancel','lostpointercapture'].forEach(t=>dpad.addEventListener(t,dpadOff));
-const KMAP={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right',KeyX:'a',KeyK:'a',Space:'a',KeyZ:'b',KeyJ:'b',Enter:'start',KeyM:'select'};
+const KMAP={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right',KeyW:'up',KeyS:'down',KeyA:'left',KeyD:'right',
+  KeyX:'a',KeyK:'a',Space:'a',KeyZ:'b',KeyJ:'b',Enter:'start',KeyP:'start',Escape:'start',KeyM:'select'};
+// keyboard vs touch decides how on-screen tips name the controls
+let kbMode=matchMedia('(hover:hover) and (pointer:fine)').matches;
+addEventListener('keydown',()=>{kbMode=true;},{capture:true});
+addEventListener('pointerdown',e=>{ if(e.pointerType==='touch') kbMode=false; },{capture:true});
 addEventListener('keydown',e=>{const k=KMAP[e.code]; if(k){e.preventDefault(); if(!e.repeat) setKey(k,1);}});
 addEventListener('keyup',e=>{const k=KMAP[e.code]; if(k) setKey(k,0);});
 addEventListener('blur',()=>{for(const k in keys) keys[k]=0;});
@@ -1493,15 +1514,16 @@ function draw(){
 }
 const hintEl=document.getElementById('hint'); let lastHint='';
 function hint(){
+  const L=kbMode?{lr:'←→',ud:'↑↓',up:'↑',dn:'↓',l:'←',r:'→',A:'X',B:'Z',S:'Enter'}:{lr:'◀▶',ud:'▲▼',up:'▲',dn:'▼',l:'◀',r:'▶',A:'A',B:'B',S:'START'};
   let h='';
-  if(mode==='title') h='▲▼ pick a row · ◀▶ change it · START to play';
-  else if(mode==='over') h='START for a new game';
-  else if(G.demo) h='Demo game. Press any button for the menu.';
-  else if(paused) h='Paused. START to resume.';
-  else if(G.phase==='streak') h='A streaker is loose! Press A to skip.';
-  else if(G.phase==='field') h=humanBatting()?'A send runners an extra base · B hold them up':'Your fielders play the ball and throw on their own';
-  else if(humanBatting()) h=G.bases.some(Boolean)?'◀▶ step in the box · A swing · B bunt · ▲ steal (▼ cancel)':'◀▶ step in the box to line up the pitch · A swing · B bunt';
-  else h=P&&P.state==='flight'?'Hold ◀ or ▶ to break the pitch':'◀▶ aim · A pitch (hold ▲ heater, ▼ change-up)';
+  if(mode==='title') h=`${L.ud} pick a row · ${L.lr} change it · ${L.S} to play`;
+  else if(mode==='over') h=`${L.S} for a new game`;
+  else if(G.demo) h=`Demo game. Press any ${kbMode?'key':'button'} for the menu.`;
+  else if(paused) h=`Paused. ${L.S} to resume.`;
+  else if(G.phase==='streak') h=`A streaker is loose! Press ${L.A} to skip.`;
+  else if(G.phase==='field') h=humanBatting()?`${L.A} send runners an extra base · ${L.B} hold them up`:'Your fielders play the ball and throw on their own';
+  else if(humanBatting()) h=G.bases.some(Boolean)?`${L.lr} step in the box · ${L.A} swing · ${L.B} bunt · ${L.up} steal (${L.dn} cancel)`:`${L.lr} step in the box to line up the pitch · ${L.A} swing · ${L.B} bunt`;
+  else h=P&&P.state==='flight'?`Hold ${L.l} or ${L.r} to break the pitch`:`${L.lr} aim · ${L.A} pitch (hold ${L.up} heater, ${L.dn} change-up)`;
   if(h!==lastHint){ hintEl.textContent=h; lastHint=h; }
 }
 let last=performance.now(),acc=0;

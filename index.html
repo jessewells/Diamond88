@@ -1043,7 +1043,7 @@ function updatePitch(dt){
     P.t+=dt;
     if(hPit){ const v=(keys.right?1:0)-(keys.left?1:0); P.ax=v*7; }
     P.vx+=P.ax*dt; P.ballX+=P.vx*dt;
-    if(P.locX===undefined&&P.t>=P.T) P.locX=P.ballX;
+    if(P.locX===undefined&&P.t>=P.T){ const o=P.t-P.T; P.locX=P.ballX-P.vx*o+.5*P.ax*o*o; }
     if(hBat){
       moveBatter(dt);
       if(!P.swing&&took('a')){P.swing={t:P.t,bunt:false}; P.swingT=0;}
@@ -1062,7 +1062,7 @@ function updatePitch(dt){
     if(!P.swing&&P.t>=P.T-.02&&Math.abs(P.ballX-(-P.hb*2.9+P.off))<.9){ hitByPitch(); return; }
     if(P.t>=P.T+.16){
       if(P.swing) pitchResult('strike');
-      else pitchResult(Math.abs(P.ballX)<=.95?'strike':'ball');
+      else pitchResult(Math.abs(P.locX??P.ballX)<=.95?'strike':'ball');
     }
   } else if(P.state==='contact'){
     P.t+=dt; if(P.t>.24) startField(P.pending);

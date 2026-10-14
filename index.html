@@ -400,9 +400,9 @@ function groundRGB(x,y,k){
 function standsRGB(x,y){
   const out=region(x,y),ax=Math.abs(x),th=Math.atan2(ax,y)*57.29578,al=(ax+y)/1.41421,dl=(ax-y)/1.41421;
   if(out<.9) return PAL.pad;
-  if(out<5){ if(y>0&&th<=45){ if(out<1.6) return PAL.wall2; const seg=Math.floor((Math.atan2(x,y)*57.29578+45)/11.25); return [PAL.wall,PAL.adR,PAL.wall,PAL.adB][seg%4]; } return PAL.wall; }
+  if(out<8){ if(y>0&&th<=45){ if(out<1.6||out>7.2) return PAL.wall2; const seg=Math.floor((Math.atan2(x,y)*57.29578+45)/11.25); return [PAL.wall,PAL.adR,PAL.wall,PAL.adB][seg%4]; } return PAL.wall; }
   if(dl>54&&al>45&&al<125&&out<16) return out<6.5?PAL.dug2:PAL.dug;
-  const o=out-5,row=Math.floor(o/3.2),f=o-row*3.2;
+  const o=out-8,row=Math.floor(o/3.2),f=o-row*3.2;
   if(f<.7) return PAL.seat2;
   const p=hash(Math.floor(x/2.4)*7+row*131,Math.floor(y/2.4)*13+row*17);
   if(p<.62) return f>2.2?CSKIN[Math.floor(p*40)%4]:CROWD[Math.floor(p*977)%CROWD.length];
@@ -432,7 +432,7 @@ function buildWorld(){
   const [c,g]=mk(WW,WH);
   paint(g,WW,WH,(X,Y)=>{ const x=((X+.5)/RS-WX0)/FK,y=(WY0-(Y+.5)/RS)/(FK*FT); return groundRGB(x,y,1.6)||standsRGB(x,y); });
   g.font=tinyFont(4); g.textAlign='center'; g.textBaseline='middle';
-  [[-38,'330'],[-20,'375'],[0,'400'],[20,'375'],[38,'330']].forEach(([a,s])=>{ const p=fw(...polar(fenceR(a)+3,a)); g.fillStyle='#f4e9c8'; g.fillText(s,p[0],p[1]); });
+  [[-38,'330'],[-20,'375'],[0,'400'],[20,'375'],[38,'330']].forEach(([a,s])=>{ const p=fw(...polar(fenceR(a)+4.4,a)); g.fillStyle='#143f2b'; g.fillRect(p[0]-7,p[1]-2.6,14,5.2); g.fillStyle='#f4e9c8'; g.fillText(s,p[0],p[1]+.2); });
   [-45,45].forEach(a=>{ const p=fw(...polar(fenceR(45)+1,a)); g.fillStyle='#f4c84a'; g.fillRect(p[0]-.5,p[1]-14,1,14); g.fillRect(p[0]-1.5,p[1]-14,3,1); });
   return c;
 }
@@ -864,7 +864,7 @@ const MENU={row:0,you:0,cpu:1,inn:0,bat:1,lvl:1,mode:0};
 const LVL=[{name:'ROOKIE',win:1.3,reach:1.15,cpuNoise:1.5,pitchT:1.12,aim:.75,curve:.5,fieldSpd:.9},
            {name:'PRO',win:1,reach:1,cpuNoise:1,pitchT:1,aim:1,curve:1,fieldSpd:1},
            {name:'ALL-STAR',win:.88,reach:.95,cpuNoise:.7,pitchT:.92,aim:1.1,curve:1.25,fieldSpd:1.06}];
-const DERBY_OUTS=10;
+const DERBY_OUTS=10,DERBY_TAKES=3;
 function loadBest(){ try{ return +localStorage.getItem('d88.derbyBest')||0; }catch(_){ return 0; } }
 function saveBest(n){ try{ localStorage.setItem('d88.derbyBest',String(n)); }catch(_){} }
 const INN=[3,6,9];
@@ -879,7 +879,7 @@ function newGame(you,cpu,innings,batSecond,demo,opts={}){
   G={teams:[away,home],human:demo?-1:(batSecond?1:0),innings,inning:1,half:0,score:[0,0],line:[[0],[]],hits:[0,0],
      outs:0,balls:0,strikes:0,bases:[null,null,null],ab:[0,0],phase:'pitch',banner:null,demo,batOff:0,pa:0,streakAt:Math.random()<.3?6+((Math.random()*24)|0):-1};
   G.lv=LVL[opts.lv===undefined?1:opts.lv]; G.fb=null;
-  G.derby=opts.derby?{hr:0,outs:0,best:loadBest()}:null;
+  G.derby=opts.derby?{hr:0,outs:0,takes:0,best:loadBest()}:null;
   if(G.derby){ G.half=1; G.streakAt=-1; G.line=[[0],[0]]; }
   mode='play'; paused=false; F=null;
   startAtBat();
@@ -1012,7 +1012,10 @@ function swingFeedback(dtc,dx,hit){
 function pitchResult(kind){
   if(humanBatting()&&P.swing&&!P.resolved&&!P.swing.bunt) swingFeedback(P.swing.t+.08-P.T,P.locX-P.off,false);
   if(G.derby){ P.state='after'; P.t=0; P.msgT=1;
-    if(kind==='strike'&&P.swing) derbyOut('OUT '+(G.derby.outs+1)); else { P.msg=kind==='ball'?'BALL':'TAKE'; P.next=newPitch; SFX.ball(); }
+    const d=G.derby; if(P.swing) d.takes=0; else d.takes++;
+    if(kind==='strike'&&P.swing) derbyOut('OUT '+(d.outs+1));
+    else { P.msg=kind==='ball'?'BALL':'TAKE'; SFX.ball();
+      P.next=d.takes>=DERBY_TAKES?()=>{ d.takes=0; newPitch(); paused=true; }:newPitch; }
     return; }
   P.state='after'; P.t=0; P.msgT=1;
   if(kind==='ball'){ G.balls++; SFX.ball();
@@ -1299,7 +1302,7 @@ function updateField(dt){
 function finishPlay(){
   const f=F; F=null;
   if(G.derby){
-    const d=G.derby; G.outs=0; G.bases=[null,null,null];
+    const d=G.derby; d.takes=0; G.outs=0; G.bases=[null,null,null];
     if(f.hr) d.hr++; else { d.outs++; SFX.out(); }
     const left=DERBY_OUTS-d.outs;
     banner(f.hr?'HOME RUN!':(f.foul?'FOUL':'OUT')+' '+d.outs,d.hr+' HR · '+left+(left===1?' OUT LEFT':' OUTS LEFT'),
@@ -1636,7 +1639,7 @@ async function boot(){
   bgWorld=buildWorld(); bgPitch=buildPitchBG(); window.__ready=true;
   requestAnimationFrame(t=>{last=t;frame(t);});
 }
-window.__dbg={step:n=>{for(let i=0;i<n;i++) update(DT);},get G(){return G;},get mode(){return mode;},get P(){return P;},get F(){return F;},start:()=>{newGame(0,1,3,true,true);}};
+window.__dbg={step:n=>{for(let i=0;i<n;i++) update(DT);},get G(){return G;},get mode(){return mode;},get paused(){return paused;},get P(){return P;},get F(){return F;},start:()=>{newGame(0,1,3,true,true);}};
 boot();
 </script>
 

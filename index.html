@@ -90,6 +90,7 @@ kbd{font:inherit;font-size:9px;color:var(--ink);background:var(--deck);border-ra
     <span><kbd>X</kbd> or <kbd>Space</kbd> A: swing, pitch, run</span>
     <span><kbd>Z</kbd> B: bunt, hold</span>
     <span><kbd>Enter</kbd> start/pause</span>
+    <span>Paused: <kbd>Z</kbd> quit to menu</span>
     <span><kbd>M</kbd> sound</span>
     <span>Gamepads work too</span>
   </div>
@@ -1573,6 +1574,7 @@ function update(dt){
   else if(mode==='play'){
     if(G.demo){ if(anyTook()){ toTitle(); pressed={}; return; } }
     else if(took('start')) paused=!paused;
+    else if(paused&&took('b')){ SFX.blip(); toTitle(); pressed={}; return; }
     if(!paused){
       if(G.banner){ G.banner.t-=dt; if(G.banner.t<=0){ const b=G.banner; G.banner=null; if(b.then) b.then(); } }
       else if(G.phase==='pitch') updatePitch(dt); else if(G.phase==='streak'&&ST) updateStreak(dt); else if(F) updateField(dt);
@@ -1597,7 +1599,8 @@ function draw(){
   drawFXScreen();
   if(mode==='play'){
     if(G.banner) drawBanner();
-    if(paused){ ctx.fillStyle='rgba(8,7,14,.75)'; ctx.fillRect(0,98,W,34); bigText('PAUSED',128,107,16,'#fff6d0','#f4b13a'); }
+    if(paused){ ctx.fillStyle='rgba(8,7,14,.75)'; ctx.fillRect(0,94,W,46); bigText('PAUSED',128,100,16,'#fff6d0','#f4b13a');
+      txt(kbMode?'ENTER RESUME   Z QUIT':'START RESUME   B QUIT',128,124,C.text,'center'); }
   }
   if(flashT>0){ ctx.fillStyle='rgba(255,255,255,'+(flashT/.1*.45)+')'; ctx.fillRect(0,0,W,H); }
 }
@@ -1609,7 +1612,7 @@ function hint(){
   else if(mode==='title') h=`${L.ud} pick a row · ${L.lr} change it · ${L.S} to play`;
   else if(mode==='over') h=`${L.S} for a new game`;
   else if(G.demo) h=`Demo game. Press any ${kbMode?'key':'button'} for the menu.`;
-  else if(paused) h=`Paused. ${L.S} to resume.`;
+  else if(paused) h=`Paused. ${L.S} to resume · ${L.B} to quit to the menu.`;
   else if(G.phase==='streak') h=`A streaker is loose! Press ${L.A} to skip.`;
   else if(G.derby&&G.phase==='pitch') h=`${L.lr} step in the box · ${L.A} swing. Any swing that isn't a homer is an out.`;
   else if(G.phase==='field') h=humanBatting()?`${L.A} send runners an extra base · ${L.B} hold them up`:'Your fielders play the ball and throw on their own';

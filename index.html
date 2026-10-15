@@ -1020,7 +1020,7 @@ function probeApi(){
 const LVL=[{name:'ROOKIE',win:1.3,reach:1.15,cpuNoise:1.5,pitchT:1.12,aim:.75,curve:.5,fieldSpd:.9},
            {name:'PRO',win:1,reach:1,cpuNoise:1,pitchT:1,aim:1,curve:1,fieldSpd:1},
            {name:'ALL-STAR',win:.88,reach:.95,cpuNoise:.7,pitchT:.92,aim:1.1,curve:1.25,fieldSpd:1.06}];
-const DERBY_OUTS=10,DERBY_TAKES=3;
+const DERBY_OUTS=10,DERBY_TAKES=3,OUT_FT=490;   // homers this long leave the stadium
 function loadBest(){ try{ return +localStorage.getItem('d88.derbyBest')||0; }catch(_){ return 0; } }
 function saveBest(n){ try{ localStorage.setItem('d88.derbyBest',String(n)); }catch(_){} }
 const INN=[3,6,9];
@@ -1307,10 +1307,11 @@ function updatePitch(dt){
 /* ---------------- ball in play ---------------- */
 function simTraj(v,la,sp){
   let x=0,y=0,z=3,vx=v*Math.cos(la)*Math.sin(sp),vy=v*Math.cos(la)*Math.cos(sp),vz=v*Math.sin(la);
-  const pts=[]; let fc=-1,hr=false,gr=false,wall=-1,after=0;
+  const pts=[]; let fc=-1,hr=false,gr=false,wall=-1,after=0,dist=0,out=false;
   for(let i=0;i<1100;i++){
     pts.push({x,y,z});
-    if(hr&&++after>10) break;   // a few rows deep, then it's in the crowd
+    // a normal homer drops a few rows deep into the crowd; a tape-measure shot sails out of the stadium
+    if(hr&&++after>(out?160:10)) break;
     const s=hyp(vx,vy,vz),k=KD*s;
     vx-=k*vx*DT; vy-=k*vy*DT; vz-=(32+k*vz)*DT; x+=vx*DT; y+=vy*DT; z+=vz*DT;
     if(hr) continue;
@@ -1318,7 +1319,10 @@ function simTraj(v,la,sp){
     if(y>0&&Math.abs(th)<=45){
       const fr=fenceR(th);
       if(r>=fr){
-        if(z>8&&fc<0){hr=true; continue;}
+        if(z>8&&fc<0){ hr=true;
+          // how far it would have carried: finish the flight with no stands in the way
+          let X=x,Y=y,Z=z,VX=vx,VY=vy,VZ=vz; for(let k=0;k<900&&Z>0;k++){ const q=hyp(VX,VY,VZ),kk=KD*q; VX-=kk*VX*DT; VY-=kk*VY*DT; VZ-=(32+kk*VZ)*DT; X+=VX*DT; Y+=VY*DT; Z+=VZ*DT; }
+          dist=Math.round(hyp(X,Y)); out=dist>=OUT_FT; continue; }
         if(z>10&&fc>=0){ gr=true; pts.push({x,y,z}); break; }   // bounced over: ground-rule double
         if(fc<0) wall=i+1;
         const nx=x/r,ny=y/r,vn=vx*nx+vy*ny; if(vn>0){vx-=1.45*vn*nx; vy-=1.45*vn*ny;}
@@ -1331,7 +1335,7 @@ function simTraj(v,la,sp){
       else{ vz=0; const h=hyp(vx,vy),dec=ROLL*DT; if(h<=dec){pts.push({x,y,z}); break;} vx*=(h-dec)/h; vy*=(h-dec)/h; }
     }
   }
-  return {pts,fc,hr,gr,wall};
+  return {pts,fc,hr,gr,wall,dist,out};
 }
 function judgeFair(tr){
   const pts=tr.pts; let i=tr.fc<0?pts.length-1:tr.fc,p=pts[i];
@@ -1571,9 +1575,11 @@ function finishPlay(){
   const f=F; F=null;
   if(G.derby){
     const d=G.derby; d.takes=0; G.outs=0; G.bases=[null,null,null];
-    if(f.hr){ d.hr++; if(d.two) d.two.hr[G.half]=d.hr; } else { d.outs++; SFX.out(); }
+    if(f.hr){ d.hr++; if(d.two) d.two.hr[G.half]=d.hr;
+      const ft=f.tr.dist||0; d.long=Math.max(d.long||0,ft); if(d.two){ d.two.long=d.two.long||[0,0]; d.two.long[G.half]=Math.max(d.two.long[G.half],ft); } }
+    else { d.outs++; SFX.out(); }
     const left=d.max-d.outs;
-    banner(f.hr?'HOME RUN!':(f.foul?'FOUL':'OUT')+' '+d.outs,d.hr+' HR · '+left+(left===1?' OUT LEFT':' OUTS LEFT'),
+    banner(f.hr?(f.tr.out?'OUT OF THE PARK!':'HOME RUN!'):(f.foul?'FOUL':'OUT')+' '+d.outs,(f.hr&&f.tr.dist?f.tr.dist+' FT · ':'')+d.hr+' HR · '+left+(left===1?' OUT LEFT':' OUTS LEFT'),
       ()=>{ if(d.outs>=d.max) derbyTurnOver(); else { G.phase='pitch'; startAtBat(); } },1.2,f.hr?C.yellow:C.text);
     return;
   }
@@ -1591,7 +1597,7 @@ function finishPlay(){
   G.bases=[null,null,null];
   if(G.outs<3) for(const r of f.runners){ if(r.out||r.scored) continue; const p=Math.round(r.pos); if(p>=1&&p<=3&&!G.bases[p-1]) G.bases[p-1]=r.info; }
   let res,col=C.text;
-  if(f.hr){res='HOME RUN!';col=C.yellow;}
+  if(f.hr){res=f.tr.out?'OUT OF THE PARK!':'HOME RUN!';col=C.yellow;}
   else if(f.gr){res='GROUND RULE DOUBLE';col=C.yellow;}
   else if(bat.out){
     if(f.outsPlay>=3) res='TRIPLE PLAY'; else if(f.outsPlay===2) res='DOUBLE PLAY';
@@ -1604,7 +1610,7 @@ function finishPlay(){
   { const bl=batLine(),pl=pitLine(),a=armNow(); bl.ab++; bl.rbi+=f.runsPlay; pl.r+=f.runsPlay; pl.outs+=f.outsPlay; a.load+=3*f.runsPlay;
     if(hit){ bl.h++; pl.h++; a.load+=2; } if(f.hr) bl.hr++; }
   if(!bat.out&&!f.hr){ SFX.hit(); if(G.half===1) SFX.cheer(); }
-  const sub=f.runsPlay?(f.runsPlay+(f.runsPlay>1?' RUNS SCORE':' RUN SCORES')):'';
+  const sub=(f.hr&&f.tr.dist?f.tr.dist+' FT · ':'')+(f.runsPlay?(f.runsPlay+(f.runsPlay>1?' RUNS SCORE':' RUN SCORES')):'');
   G.ab[G.half]++;
   banner(res,sub,()=>{
     if(G.outs>=3) endHalf();
@@ -1769,6 +1775,9 @@ function drawField(){
   if(F.ctrl>=0){ const f=F.fl[F.ctrl],q=S(f.x,f.y); ctx.fillStyle=C.yellow; ctx.beginPath(); ctx.moveTo(q[0]-3,q[1]-30); ctx.lineTo(q[0]+3,q[1]-30); ctx.lineTo(q[0],q[1]-26); ctx.fill(); }
   F.pops.forEach(p=>{ if(p.t<0) return; const q=S(p.x,p.y); txt(p.s,q[0],q[1]-24-p.t*8,p.s==='RUN'?C.yellow:C.red,'center'); });
   if(F.foul&&!F.air&&F.t>.4) bigText('FOUL',128,40,16,'#fff6d0','#f4b13a');
+  if(F.hr&&F.tr.dist&&F.t>Math.min(2.6,(F.tr.pts.length-1)*DT)){
+    if(F.tr.out) bigText('OUT OF THE PARK!',128,34,8,'#ffffff','#e2483b');
+    bigText(F.tr.dist+' FT',128,46,16,'#fffbe8','#f4c84a','#7a2a14'); }
   if(G.fb&&G.fb.t>0&&!F.steal){ ctx.fillStyle='rgba(8,7,14,.75)'; ctx.fillRect(0,23,W,13); txt(G.fb.text,128,26,G.fb.col,'center'); }
 }
 function drawBanner(){
@@ -1778,7 +1787,7 @@ function drawBanner(){
   ctx.fillStyle=gr; ctx.fillRect(0,y,W,hgt);
   ctx.fillStyle='rgba(255,255,255,.035)'; for(let i=-hgt;i<W;i+=8){ ctx.beginPath(); ctx.moveTo(i,y+hgt); ctx.lineTo(i+hgt,y); ctx.lineTo(i+hgt+3,y); ctx.lineTo(i+3,y+hgt); ctx.fill(); }
   ctx.fillStyle=C.yellow; ctx.fillRect(0,y,W,1); ctx.fillRect(0,y+hgt-1,W,1);
-  const hr=b.text.startsWith('HOME RUN'),flick=hr&&((age*10|0)%2);
+  const hr=b.text.startsWith('HOME RUN')||b.text.startsWith('OUT OF THE PARK'),flick=hr&&((age*10|0)%2);
   const size=b.text.length>14?8:16,ty=y+(b.sub?(size===16?10:14):(size===16?12:16));
   bigText(b.text,128,ty,size,flick?'#ffffff':'#fff6d0',hr?(flick?'#e2483b':'#f4c84a'):(b.col===C.yellow?'#f4b13a':'#c8c2d4'));
   if(b.sub) txt(b.sub,128,y+36,C.dim,'center');
@@ -1816,12 +1825,12 @@ function drawTitle(){
 function drawOver(){
   ctx.drawImage(bgPitch,0,0,W,H);
   ctx.fillStyle='rgba(6,5,12,.7)'; ctx.fillRect(0,0,W,H);
-  if(G.derby&&G.lb&&G.overPg===1) return drawLb();
+  if(G.derby&&G.lb&&G.overPg>=1) return drawLb();
   if(G.derby&&G.derby.two){ const t=G.derby.two,fl=(performance.now()/250|0)%2;
     bigText('DERBY OVER',128,24,16,'#fff6d0','#f4b13a');
     panel(36,56,184,58);
     [1,0].forEach((s,i)=>{ const y=66+i*24; teamChip(G.teams[s],48,y+3.5); txt(G.teams[s].name.length>12?G.teams[s].abbr:G.teams[s].name,60,y+4,C.text);
-      bigText(String(t.hr[s]),196,y,16,'#fffbe8','#f4c84a','#7a2a14'); });
+      bigText(String(t.hr[s]),196,y,16,'#fffbe8','#f4c84a','#7a2a14'); if(t.long&&t.long[s]) tiny('LONG '+t.long[s]+' FT',150,y+14,C.dim,'right'); });
     const tie=t.hr[0]===t.hr[1],w=t.hr[1]>t.hr[0]?1:0,me=!tie&&G.pl[w]===NET.me;
     bigText(tie?'TIE!':me?'YOU WIN!':G.teams[w].abbr+' WINS',128,130,16,me&&fl?'#ffffff':'#fff6d0',me?'#e2483b':'#f4b13a');
     if(t.swingoff) txt('AFTER '+t.swingoff+' SWING-OFF'+(t.swingoff>1?'S':''),128,154,C.dim,'center');
@@ -1831,7 +1840,7 @@ function drawOver(){
     bigText('DERBY OVER',128,24,16,'#fff6d0','#f4b13a');
     panel(36,62,184,70); teamChip(G.teams[1],48,72.5); txt(G.teams[1].name,60,73,C.text);
     bigText(String(d.hr),96,90,24,'#fffbe8','#f4c84a','#7a2a14'); txt(d.hr===1?'HOME RUN':'HOME RUNS',118,98,C.text);
-    txt('LEVEL '+G.lv.name,128,120,C.dim,'center');
+    txt('LEVEL '+G.lv.name+(d.long?'  ·  LONGEST '+d.long+' FT':''),128,120,C.dim,'center');
     const lb=G.lb;
     if(d.newBest&&!(lb&&lb.ent)) bigText('NEW BEST!',128,146,16,fl?'#ffffff':'#fff6d0',fl?'#e2483b':'#f4c84a');
     else txt('BEST '+d.best,128,150,C.dim,'center');
@@ -1840,7 +1849,7 @@ function drawOver(){
         if(sel){ ctx.fillStyle=C.yellow; ctx.fillRect(x-2,200,14,1.5); } });
       tiny('UP/DOWN LETTER   LEFT/RIGHT MOVE   '+(kbMode?'X':'A')+' OK',128,208,C.dim,'center'); return; }
     if(lb&&lb.sending) txt('SENDING...',128,170,C.dim,'center');
-    else if(lb&&lb.top) txt('<  LEADERBOARD  >',128,170,C.dim,'center');
+    else if(lb&&lb.top) txt('<  LEADERBOARDS  >',128,170,C.dim,'center');
     if((performance.now()/500|0)%2) txt('PRESS START',128,196,C.text,'center');
     return; }
   if(G.overPg>0) return drawBox(G.overPg-1);
@@ -2181,14 +2190,15 @@ async function lbCall(path,body){
   if(!r.ok) throw new Error('lb '+r.status); return r.json();
 }
 function lbStart(){
-  if(!LB_URL) return; const d=G.derby,lb=G.lb={top:null,err:false,ent:null};
-  lbCall('/top').then(top=>{ lb.top=top;
-    if(d.hr>0&&(top.length<10||d.hr>top[top.length-1].hr)){ const ini=(SET.ini||'AAA').padEnd(3,'A'); lb.ent={ch:[...ini].map(c=>Math.max(0,LETTERS.indexOf(c))),pos:0}; }
+  if(!LB_URL) return; const d=G.derby,lb=G.lb={top:null,long:[],err:false,ent:null};
+  Promise.all([lbCall('/top'),lbCall('/long').catch(()=>[])]).then(([top,long])=>{ lb.top=top; lb.long=long;
+    const ft=d.long||0,longOk=ft>0&&(long.length<10||ft>long[long.length-1].ft);
+    if(d.hr>0&&(top.length<10||d.hr>top[top.length-1].hr||longOk)){ const ini=(SET.ini||'AAA').padEnd(3,'A'); lb.ent={ch:[...ini].map(c=>Math.max(0,LETTERS.indexOf(c))),pos:0}; }
   }).catch(()=>{ lb.err=true; });
 }
 function lbSubmit(){
   const lb=G.lb,n=lb.ent.ch.map(i=>LETTERS[i]).join(''); lb.ent=null; lb.sending=true; SET.ini=n; saveSettings();
-  lbCall('/score',{n,hr:G.derby.hr,lvl:LVL.indexOf(G.lv)}).then(top=>{ lb.top=top; lb.sending=false; lb.mine=n; G.overPg=1; SFX.score(); })
+  lbCall('/score',{n,hr:G.derby.hr,ft:G.derby.long||0,lvl:LVL.indexOf(G.lv)}).then(top=>{ lb.top=top; lb.sending=false; lb.mine=n; G.overPg=1; SFX.score(); return lbCall('/long').then(l=>{ lb.long=l; }); })
     .catch(()=>{ lb.sending=false; lb.err=true; });
 }
 function updateLbEntry(){
@@ -2199,7 +2209,14 @@ function updateLbEntry(){
   if(took('start')) lbSubmit();
 }
 function drawLb(){
-  const lb=G.lb; bigText('LEADERBOARD',128,24,16,'#fff6d0','#f4b13a');
+  const lb=G.lb;
+  if(G.overPg===2){ bigText('LONGEST HR',128,24,16,'#fff6d0','#f4b13a'); panel(36,52,184,134);
+    tiny('<  BACK    PRESS START',128,200,C.dim,'center');
+    if(!lb.long||!lb.long.length){ txt('NO HOMERS YET',128,110,C.dim,'center'); return; }
+    lb.long.forEach((r,i)=>{ const y=59+i*12.5,me=r.n===lb.mine&&r.ft===G.derby.long;
+      txt(String(i+1).padStart(2),48,y,C.dim); txt(r.n,76,y,me?C.yellow:C.text); txt(r.ft+' FT',178,y,C.yellow,'right'); tiny(['ROOKIE','PRO','ALL-STAR'][r.lvl]||'',212,y+2,C.dim,'right'); });
+    return; }
+  bigText('LEADERBOARD',128,24,16,'#fff6d0','#f4b13a');
   panel(36,52,184,134);
   if(lb.err) { txt('OFFLINE',128,110,C.dim,'center'); return; }
   if(!lb.top) { txt('LOADING...',128,110,C.dim,'center'); return; }
@@ -2323,7 +2340,7 @@ function update(dt){
     else {
       const ch=(took('right')?1:0)-(took('left')?1:0);
       if(ch&&!G.demo&&!G.derby){ G.overPg=(G.overPg+ch+3)%3; SFX.blip(); }
-      if(ch&&G.derby&&G.lb&&G.lb.top){ G.overPg=1-G.overPg; SFX.blip(); }
+      if(ch&&G.derby&&G.lb&&G.lb.top){ G.overPg=(G.overPg+ch+3)%3; SFX.blip(); }
       if(G.demo?(overT>6||anyTook()):(overT>.8&&(took('start')||took('a')))){ if(G.season&&SEA) toSeason(); else toTitle(); }
     }
   }

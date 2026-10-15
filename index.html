@@ -253,7 +253,7 @@ function loadSettings(){
   const L=allTeams(),ix=id=>L.findIndex(t=>t.id===id),s=SET||{};
   for(const k of ['mode','lvl','inn','bat','fld','park','time','wind']) if(Number.isInteger(s[k])) MENU[k]=s[k];
   MENU.park=clamp(MENU.park,0,PARKS.length-1); MENU.time=clamp(MENU.time,0,1); MENU.wind=clamp(MENU.wind,0,1);
-  MENU.fld=clamp(MENU.fld,0,1); MENU.mode=clamp(MENU.mode,0,3); MENU.lvl=clamp(MENU.lvl,0,2); MENU.inn=clamp(MENU.inn,0,2); MENU.bat=clamp(MENU.bat,0,1);
+  MENU.fld=clamp(MENU.fld,0,1); MENU.mode=clamp(MENU.mode,0,MODES.length-1); MENU.lvl=clamp(MENU.lvl,0,2); MENU.inn=clamp(MENU.inn,0,2); MENU.bat=clamp(MENU.bat,0,1);
   const y=ix(s.you),c=ix(s.cpu); if(y>=0) MENU.you=y; if(c>=0&&c!==MENU.you) MENU.cpu=c;
   if(MENU.cpu===MENU.you) MENU.cpu=(MENU.you+1)%L.length;
   if(s.muted) setMuted(true);
@@ -530,6 +530,7 @@ const SFX={
   crowd(){ const t=now(); nz(t,2,{per:3,vol:.12,mode:'swell'}); nz(t+.2,1.6,{per:5,vol:.08,mode:'swell'}); },
   crackle(){ const t=now(); for(let i=0;i<6;i++) nz(t+i*.07+Math.random()*.04,.05,{per:2+Math.random()*3|0,vol:.12,short:Math.random()<.5}); },
   hr(){ rumble('hr'); playSong('hr'); SFX.crowd(); },
+  ach(){ const t=now(.05); ['E5','G5','C6','E6','G6'].forEach((n,i)=>voice('p0.25',NOTE(n),t+i*.06,.09,{vol:.1})); voice('p0.5',NOTE('C7'),t+.32,.3,{vol:.09}); },
   charge(){ playSong('charge'); setTimeout(()=>SFX.crowd(),1300); },
   // crowd chant: organ lead-in, then three rounds of a shouted "LET'S GO!" and clap-clap clap-clap-clap
   chant(){ playSong('letsgo'); const t=now(1.85);
@@ -1140,7 +1141,7 @@ function drawFXScreen(){
 let ST=null;
 const STREAKER={abbr:'STK',jersey:'#e2a877',pants:'#e2a877',cap:'#5a3a1e'},GUARD={abbr:'SEC',jersey:'#f2c94c',pants:'#26222c',cap:'#26222c'};
 const ST_PATH=[[-175,300],[-60,235],[30,282],[105,228],[150,262]];
-function startStreak(){
+function startStreak(){ earn('STREAK');
   let len=0; const seg=[]; for(let i=1;i<ST_PATH.length;i++){ const d=hyp(ST_PATH[i][0]-ST_PATH[i-1][0],ST_PATH[i][1]-ST_PATH[i-1][1]); seg.push(d); len+=d; }
   ST={t:0,seg,len,x:ST_PATH[0][0],y:ST_PATH[0][1],face:1,caught:false,endT:0,guards:[{x:-215,y:70},{x:215,y:70},{x:0,y:400}]};
   G.phase='streak'; FX=FX.filter(f=>f.k==='s'); camUpdate(0,true);
@@ -1194,7 +1195,7 @@ function camUpdate(dt,now){
 /* ---------------- game state ---------------- */
 let mode='title',G=null,P=null,F=null,paused=false,titleIdle=0,overT=0;
 const MENU={row:0,you:0,cpu:1,inn:0,bat:1,lvl:1,mode:0,fld:0,sea:0,net:0,ntype:0,park:0,time:0,wind:0};
-const MODES=['GAME','HR DERBY','2 PLAYER','SEASON'];
+const MODES=['GAME','HR DERBY','2 PLAYER','SEASON','TROPHIES'];
 // Cloudflare Worker API (worker/): the 2-player relay and the derby leaderboard. On our own domain it lives at /api;
 // ?api=<url> points elsewhere for testing. If it isn't deployed, 2 player falls back to direct WebRTC and the leaderboard stays off.
 const API_BASE=(()=>{ const m=location.search.match(/[?&]api=([^&]+)/); if(m) return decodeURIComponent(m[1]).replace(/\/$/,'');
@@ -1225,7 +1226,7 @@ function newGame(you,cpu,innings,batSecond,demo,opts={}){
   const T=x=>typeof x==='object'?x:L[x],away=cl(T(batSecond?cpu:you)),home=cl(T(batSecond?you:cpu));
   G={teams:[away,home],human:demo?-1:(batSecond?1:0),innings,inning:1,half:0,score:[0,0],line:[[0],[]],hits:[0,0],
      outs:0,balls:0,strikes:0,bases:[null,null,null],ab:[0,0],phase:'pitch',banner:null,demo,batOff:0,pa:0,streakAt:Math.random()<.3?6+((Math.random()*24)|0):-1};
-  G.lv=LVL[opts.vs?1:opts.lv===undefined?1:opts.lv]; G.fb=null; G.overPg=0; G.pen=false; G.benchUI=null;
+  G.lv=LVL[opts.vs?1:opts.lv===undefined?1:opts.lv]; G.kc=[0,0]; G.down=[0,0]; G.fb=null; G.overPg=0; G.pen=false; G.benchUI=null;
   G.vs=!!opts.vs; if(G.vs) G.streakAt=-1; G.season=!!opts.season; G.manual=!!opts.manual;
   G.hum=G.vs?[true,true]:[G.human===0,G.human===1];
   G.pl=batSecond?[1,0]:[0,1];   // 2-player: which player runs each side (P1 picked first in the menu)
@@ -1260,7 +1261,7 @@ function derbyTurnOver(){
 }
 function endDerby(){
   const d=G.derby;
-  if(d.two){ mode='over'; overT=0; G.banner=null; F=null; const t=d.two; if(t.hr[0]===t.hr[1]||G.pl[t.hr[1]>t.hr[0]?1:0]===NET.me) SFX.end(); else SFX.lose(); return; }
+  if(d.two){ mode='over'; overT=0; G.banner=null; F=null; const t=d.two; if(t.hr[0]!==t.hr[1]) earn('ONLINE',t.hr[1]>t.hr[0]?1:0); if(t.hr[0]===t.hr[1]||G.pl[t.hr[1]>t.hr[0]?1:0]===NET.me) SFX.end(); else SFX.lose(); return; }
   d.newBest=d.hr>d.best; if(d.newBest){ d.best=d.hr; saveBest(d.hr); }
   mode='over'; overT=0; G.banner=null; F=null; if(d.hr>0) SFX.end(); else SFX.lose();
   lbStart();
@@ -1299,7 +1300,8 @@ function cpuPinch(){
   if(bi>=0&&Math.random()<.7) pinchHit(bi);
 }
 function banner(text,sub,then,t=1.6,col){ G.banner={text,sub,then,t,T:t,col}; }
-function addRuns(n){ G.score[G.half]+=n; G.line[G.half][G.inning-1]=(G.line[G.half][G.inning-1]||0)+n; }
+function addRuns(n){ G.score[G.half]+=n; G.line[G.half][G.inning-1]=(G.line[G.half][G.inning-1]||0)+n;
+  for(const s of [0,1]) G.down[s]=Math.max(G.down[s]||0,G.score[1-s]-G.score[s]); }
 function startAtBat(){ G.balls=0; G.strikes=0; G.batOff=0; G.pen=false; G.benchUI=null; newPitch(); cpuBullpen(); if(!G.banner) cpuPinch(); if(G.pa++===G.streakAt) startStreak(); else if(!G.demo&&!G.derby) crowdMoment(); }
 // the home crowd: CHARGE or a LET'S GO chant with their runners in scoring position, DE-FENSE when the visitors threaten,
 // and otherwise the home batter's walk-up music
@@ -1342,7 +1344,7 @@ function newPitch(){
 }
 function afterAB(){ G.ab[G.half]++; if(G.outs>=3) endHalf(); else if(!checkWalkoff()) startAtBat(); }
 function checkWalkoff(){
-  if(G.half===1&&G.inning>=G.innings&&G.score[1]>G.score[0]){ gameOver(); return true; } return false;
+  if(G.half===1&&G.inning>=G.innings&&G.score[1]>G.score[0]){ G.walkoff=true; gameOver(); return true; } return false;
 }
 function endHalf(){
   G.outs=0; G.balls=0; G.strikes=0; G.bases=[null,null,null]; F=null; G.phase='pitch';
@@ -1354,7 +1356,9 @@ function endHalf(){
   else { SFX.inning(); banner((G.half?'BOT ':'TOP ')+ord(G.inning),t.name+' UP',null,1.7); }
   startAtBat();
 }
-function gameOver(){ mode='over'; overT=0; G.banner=null; F=null; const w=G.score[0]>G.score[1]?0:1; if(!G.vs&&G.human>=0&&G.human!==w) SFX.lose(); else SFX.end(); if(G.season) seasonRecord(); }
+function gameOver(){ mode='over'; overT=0; G.banner=null; F=null; const w=G.score[0]>G.score[1]?0:1;
+  if(!G.demo){ earn('FIRST_WIN',w); if(G.walkoff) earn('WALKOFF',w); if(G.hits[1-w]===0) earn('NOHIT',w); if(G.score[1-w]===0) earn('SHUTOUT',w);
+    if((G.down[w]||0)>=3) earn('COMEBACK',w); if(G.lv.name==='ALL-STAR'&&!G.vs) earn('ALLSTAR',w); if(G.vs) earn('ONLINE',w); } if(!G.vs&&G.human>=0&&G.human!==w) SFX.lose(); else SFX.end(); if(G.season) seasonRecord(); }
 function walk(){
   const bl=batLine(),pl=pitLine(); bl.bb++; pl.bb++; armNow().load+=1;
   let r=curBatter();
@@ -1437,7 +1441,7 @@ function pitchResult(kind){
   if(kind==='ball'){ G.balls++; SFX.ball();
     if(G.balls>=4){P.msg='BALL FOUR'; P.next=walk; P.steal=null;} else {P.msg='BALL'; P.next=newPitch;} }
   else { G.strikes++; SFX.strike();
-    if(G.strikes>=3){P.msg='STRIKE THREE'; P.next=()=>{G.outs++; SFX.out(); const bl=batLine(),pl=pitLine(); bl.ab++; bl.k++; pl.k++; pl.outs++; afterAB();};} else {P.msg='STRIKE'; P.next=newPitch;} }
+    if(G.strikes>=3){P.msg='STRIKE THREE'; P.next=()=>{G.outs++; SFX.out(); if(!G.derby&&++G.kc[1-G.half]>=6) earn('KS',1-G.half); const bl=batLine(),pl=pitLine(); bl.ab++; bl.k++; pl.k++; pl.outs++; afterAB();};} else {P.msg='STRIKE'; P.next=newPitch;} }
 }
 function updatePitch(dt){
   if(P.msgT>0) P.msgT-=dt;
@@ -1775,7 +1779,7 @@ function finishPlay(){
   const f=F; F=null;
   if(G.derby){
     const d=G.derby; d.takes=0; G.outs=0; G.bases=[null,null,null];
-    if(f.hr){ d.hr++; if(d.two) d.two.hr[G.half]=d.hr;
+    if(f.hr){ d.hr++; if(d.two) d.two.hr[G.half]=d.hr; earnHomer(G.half,f); if(d.hr>=10) earn('DERBY10',G.half);
       const ft=f.tr.dist||0; d.long=Math.max(d.long||0,ft); if(d.two){ d.two.long=d.two.long||[0,0]; d.two.long[G.half]=Math.max(d.two.long[G.half],ft); } }
     else { d.outs++; SFX.out(); }
     const left=d.max-d.outs;
@@ -1787,7 +1791,7 @@ function finishPlay(){
     G.bases=[null,null,null];
     if(G.outs<3) for(const r of f.runners){ if(r.phantom||r.out||r.scored) continue; const p=Math.round(r.pos); if(p>=1&&p<=3&&!G.bases[p-1]) G.bases[p-1]=r.info; }
     { const pl=pitLine(); pl.outs+=f.outsPlay; pl.r+=f.runsPlay; armNow().load+=3*f.runsPlay; }
-    const res=f.outsPlay?'CAUGHT STEALING':'STOLEN BASE!';
+    const res=f.outsPlay?'CAUGHT STEALING':'STOLEN BASE!'; if(!f.outsPlay) earn('STEAL',G.half);
     banner(res,f.runsPlay?(f.runsPlay+' RUN'+(f.runsPlay>1?'S':'')+' SCORE'):'',()=>{
       if(G.outs>=3) endHalf(); else if(!checkWalkoff()){ G.phase='pitch'; f.cont(); } },1.3,f.outsPlay?C.text:C.yellow);
     return;
@@ -1808,7 +1812,10 @@ function finishPlay(){
   const hit=!bat.out&&f.outsPlay===0;
   if(hit) G.hits[G.half]++;
   { const bl=batLine(),pl=pitLine(),a=armNow(); bl.ab++; bl.rbi+=f.runsPlay; pl.r+=f.runsPlay; pl.outs+=f.outsPlay; a.load+=3*f.runsPlay;
-    if(hit){ bl.h++; pl.h++; a.load+=2; } if(f.hr) bl.hr++; }
+    if(hit){ bl.h++; pl.h++; a.load+=2; } if(f.hr) bl.hr++;
+    if(hit){ bl.ty=bl.ty||[]; const ty=f.hr||bat.scored?4:f.gr?2:Math.round(bat.pos); if(!bl.ty.includes(ty)) bl.ty.push(ty); if(bl.ty.length>=4) earn('CYCLE',G.half); } }
+  if(f.hr){ earnHomer(G.half,f); if(f.runsPlay>=4) earn('SLAM',G.half); }
+  if(f.outsPlay>=3) earn('TRIPLE',1-G.half);
   if(!bat.out&&!f.hr){ SFX.hit(); if(G.half===1) SFX.cheer(); }
   const sub=(f.hr&&f.tr.dist?f.tr.dist+' FT · ':'')+(f.runsPlay?(f.runsPlay+(f.runsPlay>1?' RUNS SCORE':' RUN SCORES')):'');
   G.ab[G.half]++;
@@ -2102,6 +2109,7 @@ function menuRows(){
     cpu:[m===1?'PITCHER':m===2?'P2':'CPU',AT[MENU.cpu]],inn:['INNINGS',INN[lk?SEA.inn:MENU.inn]],bat:['YOU BAT',MENU.bat?'2ND (HOME)':'1ST (AWAY)'],
     fld:['FIELDING',MENU.fld?'MANUAL':'AUTO'],park:['PARK',PARKS[MENU.park]],time:['TIME',MENU.time?'DAY':'NIGHT'],wind:['WIND',MENU.wind?'WINDY':'CALM'],net:['ONLINE',MENU.net?'JOIN A GAME':'HOST A GAME'],ntype:['PLAY',MENU.ntype?'HR DERBY':'GAME'],sea:['SEASON',SEA&&SEA.g<SEA.sched.length?(MENU.sea?'START NEW':'CONTINUE '+(SEA.g+1)+'/'+SEA.sched.length):'NEW']};
   const V=['park','time','wind'];
+  if(m===4) return [['mode',...R.mode],['ach','UNLOCKED',achCount()+' OF '+ACHS.length]];
   const keys=m===0?['mode','lvl','you','cpu','inn','bat','fld',...V]:m===1?['mode','lvl','you','cpu',...V]:m===2?(MENU.net?['mode','net','you']:MENU.ntype?['mode','net','ntype','you',...V]:['mode','net','ntype','you','inn','bat','fld',...V]):['mode','sea','lvl','you','inn','fld',...V];
   return keys.map(k=>[k,...R[k]]);
 }
@@ -2116,7 +2124,7 @@ function updateTitle(dt){
   const key=rows[MENU.row][0],locked=seaLocked();
   if(ch&&!(locked&&['lvl','you','inn'].includes(key))){ SFX.blip();
     const n=allTeams().length;
-    if(key==='mode'){ MENU.mode=(MENU.mode+ch+4)%4; MENU.row=0; }
+    if(key==='mode'){ MENU.mode=(MENU.mode+ch+MODES.length)%MODES.length; MENU.row=0; }
     if(key==='lvl') MENU.lvl=(MENU.lvl+ch+3)%3;
     if(key==='you'){ do MENU.you=(MENU.you+ch+n+1)%(n+1); while(MENU.you===MENU.cpu&&MENU.mode!==3); }   // index n is "+ NEW TEAM"
     if(key==='cpu'){ do MENU.cpu=(MENU.cpu+ch+n)%n; while(MENU.cpu===MENU.you); }
@@ -2133,7 +2141,8 @@ function updateTitle(dt){
   }
   const L=allTeams(),you=L[MENU.you];
   if(key==='you'&&!locked&&took('b')){ SFX.blip(); openBuilder(you&&you.custom?you.saved:null); return; }
-  if(!you&&!locked&&(took('start')||took('a'))){ SFX.blip(); openBuilder(null); return; }
+  if(!you&&!locked&&MENU.mode!==4&&(took('start')||took('a'))){ SFX.blip(); openBuilder(null); return; }
+  if(MENU.mode===4&&(took('start')||took('a'))){ SFX.blip(); saveSettings(); mode='ach'; ACHV.sel=0; return; }
   if(took('start')||took('a')){ SFX.score(); saveSettings();
     if(MENU.mode===3){ if(!locked) newSeason(); toSeason(); return; }
     if(MENU.mode===2){ if(MENU.net){ netReset(); LOBBY.pos=0; mode='lobby'; } else hostRoom(); return; }
@@ -2237,6 +2246,7 @@ function netMsg(m){
   } else if(NET.guest){
     if(m.t==='s') netApply(m);
     else if(m.t==='ping') netSend({t:'pong',ts:m.ts});
+    else if(m.t==='ach') achLocal(String(m.id));
     else if(m.t==='lobby'){ NET.live=false; G=null; F=null; P=null; stopMusic(); mode='lobby'; NET.st='CONNECTED. WAITING FOR HOST'; }
   }
 }
@@ -2345,6 +2355,7 @@ function seasonRecord(){
   for(const l of G.box[ys].bat){ const t=SEA.bat[l.name]||(SEA.bat[l.name]={ab:0,h:0,hr:0,rbi:0,bb:0,k:0}); for(const k in t) t[k]+=l[k]; }
   for(const l of G.box[ys].pit){ const t=SEA.pit[l.name]||(SEA.pit[l.name]={outs:0,h:0,r:0,bb:0,k:0}); for(const k in t) t[k]+=l[k]; }
   SEA.g++; store.set('season',SEA);
+  if(SEA.g>=SEA.sched.length&&seaStand()[0].i===0) earn('PENNANT');
 }
 function seaStand(){ return SEA.rec.map((r,i)=>({i,w:r[0],l:r[1],rs:r[2],ra:r[3]})).sort((a,b)=>(b.w-b.l)-(a.w-a.l)||(b.rs-b.ra)-(a.rs-a.ra)); }
 let seaPg=0;
@@ -2388,6 +2399,74 @@ function drawSeason(){
     if(!Object.keys(SEA.pit).length) txt('NO GAMES YET',128,80,C.dim,'center');
   }
   tiny('<  MORE  >    A PLAY    B MENU',128,224,C.dim,'center');
+}
+
+/* ---------------- trophies (achievements) ---------------- */
+// Saved on this device. In online games the host decides them and tells the guest which ones it earned.
+const ACHS=[
+  ['FIRST_WIN','FIRST WIN','WIN A GAME'],
+  ['FIRST_HR','GOING DEEP','HIT A HOME RUN'],
+  ['TAPE','TAPE MEASURE','HIT A HOMER 450 FT OR MORE'],
+  ['OUTPARK','OUT OF HERE','HIT ONE OUT OF THE STADIUM'],
+  ['SLAM','GRAND SLAM','HOMER WITH THE BASES LOADED'],
+  ['CYCLE','HIT FOR THE CYCLE','1B, 2B, 3B AND HR BY ONE BATTER IN A GAME'],
+  ['WALKOFF','WALK-OFF','WIN IT IN YOUR LAST AT-BAT'],
+  ['NOHIT','NO-HITTER','WIN WITHOUT ALLOWING A HIT'],
+  ['SHUTOUT','SHUTOUT','WIN WITHOUT ALLOWING A RUN'],
+  ['KS','PUNCH OUT','STRIKE OUT 6 IN ONE GAME'],
+  ['COMEBACK','COMEBACK KIDS','WIN AFTER TRAILING BY 3 OR MORE'],
+  ['ALLSTAR','ALL-STAR','WIN A GAME ON ALL-STAR LEVEL'],
+  ['STEAL','SPEEDSTER','STEAL A BASE'],
+  ['TRIPLE','TRIPLE PLAY','TURN A TRIPLE PLAY'],
+  ['DERBY10','DERBY KING','10 HOMERS IN ONE DERBY'],
+  ['ONLINE','ONLINE WIN','BEAT A FRIEND IN 2 PLAYER'],
+  ['PENNANT','PENNANT','FINISH A SEASON IN FIRST PLACE'],
+  ['FARM','INTO THE TREES','HOMER AT WELLS FARM'],
+  ['WIND','GONE WITH THE WIND','HOMER WITH A 10+ MPH WIND BLOWING OUT'],
+  ['STREAK','SECURITY!','SEE A STREAKER RUN ON THE FIELD'],
+];
+let ACH=store.get('ach',{}); const ACHQ=[],ACHV={sel:0};
+const achCount=()=>ACHS.filter(a=>ACH[a[0]]).length;
+function achLocal(id){
+  if(ACH[id]||!ACHS.some(a=>a[0]===id)) return; ACH[id]=Date.now(); store.set('ach',ACH); ACHQ.push({id,t:3}); SFX.ach.__raw?SFX.ach.__raw():SFX.ach();
+}
+// side = the team that earned it; only a human's side counts (in online play, the guest is told over the wire)
+function earn(id,side){
+  if(!G||G.demo) return;
+  if(G.vs){ if(side===undefined||G.pl[side]===NET.me) achLocal(id); if(NET.host&&(side===undefined||G.pl[side]!==NET.me)) netSend({t:'ach',id}); return; }
+  if(side===undefined||G.hum[side]) achLocal(id);
+}
+function earnHomer(side,f){
+  earn('FIRST_HR',side); const ft=f.tr.dist||0;
+  if(ft>=450) earn('TAPE',side); if(f.tr.out) earn('OUTPARK',side);
+  if(G.venue&&G.venue.park===1) earn('FARM',side);
+  if(G.venue&&G.venue.mph>=10&&Math.cos(G.venue.dir*Math.PI/180)>.6) earn('WIND',side);
+}
+function drawAchToast(){
+  const a=ACHQ[0]; if(!a) return; const def=ACHS.find(x=>x[0]===a.id),k=Math.min(1,(3-a.t)/.2,a.t/.2),y=-30+k*56;
+  ctx.fillStyle='rgba(10,8,16,.94)'; ctx.fillRect(28,y,200,26); ctx.strokeStyle=C.yellow; ctx.lineWidth=1; ctx.strokeRect(28.5,y+.5,199,25);
+  drawTrophy(40,y+13,true); tiny('TROPHY UNLOCKED',54,y+4,C.dim); txt(def[1],54,y+12,C.yellow);
+}
+function drawTrophy(x,y,on){
+  const c=on?C.yellow:'#3a3446',d=on?'#b8862a':'#2a2533';
+  ctx.fillStyle=d; ctx.fillRect(x-6,y-6,2,4); ctx.fillRect(x+4,y-6,2,4);
+  ctx.fillStyle=c; ctx.fillRect(x-4,y-7,8,6); ctx.fillRect(x-3,y-1,6,1); ctx.fillRect(x-1,y,2,3); ctx.fillRect(x-3,y+3,6,2);
+  if(on){ ctx.fillStyle='#fff3c0'; ctx.fillRect(x-3,y-6,1,3); }
+}
+function updateAch(){
+  const n=ACHS.length;
+  if(took('up')){ ACHV.sel=(ACHV.sel+n-1)%n; SFX.blip(); }
+  if(took('down')){ ACHV.sel=(ACHV.sel+1)%n; SFX.blip(); }
+  if(took('b')||took('start')||took('a')){ SFX.blip(); mode='title'; titleIdle=0; }
+}
+function drawAch(){
+  ctx.drawImage(bgPitch,0,0,W,H); ctx.fillStyle='rgba(6,5,12,.82)'; ctx.fillRect(0,0,W,H);
+  bigText('TROPHIES',128,10,16,'#fff6d0','#f4b13a'); tiny(achCount()+' OF '+ACHS.length+' UNLOCKED',128,32,C.dim,'center');
+  panel(10,42,236,184); const per=10,top=clamp(ACHV.sel-4,0,ACHS.length-per);
+  for(let i=0;i<per;i++){ const j=top+i,a=ACHS[j]; if(!a) break; const y=47+i*17.8,on=!!ACH[a[0]],sel=j===ACHV.sel;
+    if(sel){ ctx.fillStyle='rgba(244,200,74,.12)'; ctx.fillRect(12,y-1,232,17); }
+    drawTrophy(24,y+8,on); txt(a[1],36,y+1,on?C.text:C.dim); tiny(a[2],36,y+11,on?C.dim:'#5a5368'); }
+  if(top>0) tiny('▲',240,44,C.dim,'center'); if(top+per<ACHS.length) tiny('▼',240,218,C.dim,'center');
 }
 
 /* ---------------- derby leaderboard ---------------- */
@@ -2529,10 +2608,11 @@ function update(dt){
   routeInput();
   if(took('select')){ setMuted(!muted); if(!muted){ audioInit(); SFX.score(); } saveSettings(); }
   if(mode==='build'){ clearPressed(); return; }
-  if(NET.guest&&NET.live){ musicTick(); ambTick(mode==='play'&&!paused); clearPressed(); return; }   // the host runs the game
+  if(NET.guest&&NET.live){ musicTick(); ambTick(mode==='play'&&!paused); if(ACHQ[0]&&(ACHQ[0].t-=dt)<=0) ACHQ.shift(); clearPressed(); return; }   // the host runs the game
   if(mode==='lobby'){ updateLobby(); musicTick(); clearPressed(); return; }
   if(mode==='title') updateTitle(dt);
   else if(mode==='season'){ if(!SEA) toTitle(); else updateSeason(); }
+  else if(mode==='ach') updateAch();
   else if(mode==='play'){
     if(G.demo){ if(anyTook()){ toTitle(); clearPressed(); return; } }
     else if(took('start')||ptook('start')) paused=!paused;
@@ -2552,6 +2632,7 @@ function update(dt){
     }
   }
   if(G&&G.fb&&!paused) G.fb.t-=dt; if(padToast>0) padToast-=dt;
+  if(ACHQ[0]&&(ACHQ[0].t-=dt)<=0) ACHQ.shift();
   updateFX(dt); if(shakeT>0) shakeT-=dt; if(flashT>0) flashT-=dt;
   if(mode==='play'&&G&&!paused&&((G.phase==='field'&&F)||(G.phase==='streak'&&ST))) camUpdate(dt);
   musicTick(); ambTick(mode==='play'&&!paused&&G&&!G.demo); if((mode==='title'||mode==='season')&&!musicName&&AC&&AC.state==='running'&&!muted) playSong('title',true);
@@ -2563,6 +2644,7 @@ function draw(){
   ctx.fillStyle='#000'; ctx.fillRect(-6,-6,W+12,H+12);
   if(mode==='title'||mode==='build') drawTitle();
   else if(mode==='season') drawSeason();
+  else if(mode==='ach') drawAch();
   else if(mode==='lobby') drawLobby();
   else if(mode==='over') drawOver();
   else { if(G.phase==='field'&&F) drawField(); else if(G.phase==='streak'&&ST) drawStreak(); else drawPitch(); drawHUD(); }
@@ -2573,6 +2655,7 @@ function draw(){
       txt(kbMode?'ENTER RESUME   Z QUIT':'START RESUME   B QUIT',128,124,C.text,'center'); }
   }
   if(flashT>0){ ctx.fillStyle='rgba(255,255,255,'+(flashT/.1*.45)+')'; ctx.fillRect(0,0,W,H); }
+  drawAchToast();
 }
 const hintEl=document.getElementById('hint'); let lastHint='';
 function hint(){
@@ -2581,9 +2664,10 @@ function hint(){
   if(padToast>0) h='Controller connected. A swing/pitch · B bunt · START pause · SELECT sound';
   else if(mode==='build') h='Type a team name and tap GENERATE, or build it player by player.';
   else if(mode==='lobby') h=NET.host?(NET.oppTeam?`${L.S} to play · ${L.B} leave`:'Send your friend the game code · '+L.B+' to leave'):NET.guest?`Waiting for the host to start · ${L.B} leave`:`Enter the code from your friend's screen · ${L.B} back`;
+  else if(mode==='ach') h=`${L.ud} scroll · ${L.B} back to the menu`;
   else if(mode==='season') h=`${L.A} play the next game · ${L.lr} standings and stats · ${L.B} menu`;
   else if(mode==='title'){ const yt=allTeams()[MENU.you],rk=(menuRows()[MENU.row]||[])[0];
-    h=rk==='mode'?(MENU.mode===2?'2 PLAYER: online, each player on their own phone or laptop. One hosts, the other joins with the code.':MENU.mode===3?'SEASON: 9 games against 3 teams, with standings and season stats.':`${L.lr} change mode · ${L.S} to play`)
+    h=rk==='mode'&&MENU.mode===4?`TROPHIES: ${achCount()} of ${ACHS.length} unlocked. ${L.S} to see them all.`:rk==='mode'?(MENU.mode===2?'2 PLAYER: online, each player on their own phone or laptop. One hosts, the other joins with the code.':MENU.mode===3?'SEASON: 9 games against 3 teams, with standings and season stats.':`${L.lr} change mode · ${L.S} to play`)
       :rk==='park'?'WELLS FARM: a tree-farm ballpark with The Pines coffee stand and the big red barn past the fence.'
       :rk==='time'?'DAY or NIGHT game (at night the farm trees light up).'
       :rk==='wind'?'WINDY: a random wind each game. Blowing out carries fly balls farther; blowing in knocks them down.'

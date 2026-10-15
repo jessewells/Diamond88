@@ -9,6 +9,9 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Diamond '88">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta property="og:title" content="Diamond '88">
 <meta property="og:description" content="8-bit baseball in your browser. Tap to play.">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);box-sizing:border-box}[hidden]{display:none!important}</style>
@@ -43,6 +46,7 @@ body{margin:0;background:var(--bezel);color:var(--ink);font-family:var(--f-displ
 #screen{display:block;width:100%;aspect-ratio:256/240;image-rendering:pixelated;image-rendering:crisp-edges;background:#000}
 .keys{display:none;flex-wrap:wrap;justify-content:center;gap:8px 18px;font-size:9px;color:var(--dim);letter-spacing:.04em;max-width:100%}
 .keys span{display:flex;align-items:center;gap:4px;white-space:nowrap}
+.kinst{font:inherit;font-size:9px;color:#1a1408;background:#f4c84a;border:0;border-radius:4px;padding:3px 6px;cursor:pointer}
 kbd{font:inherit;font-size:9px;color:var(--ink);background:var(--deck);border-radius:4px;padding:3px 5px;box-shadow:inset 0 -2px 0 #0b0a10,0 0 0 1px var(--deck-hi)}
 @media (hover:hover) and (pointer:fine){
   .app{max-width:960px}
@@ -119,6 +123,7 @@ kbd{font:inherit;font-size:9px;color:var(--ink);background:var(--deck);border-ra
     <span>Paused: <kbd>Z</kbd> quit to menu</span>
     <span><kbd>M</kbd> sound</span>
     <span>Gamepads work too</span>
+    <button class="inst kinst" aria-label="Install the game as an app" hidden>Install app</button>
   </div>
   <div class="deck">
     <div class="dpad" id="dpad" aria-label="Direction pad">
@@ -128,6 +133,7 @@ kbd{font:inherit;font-size:9px;color:var(--ink);background:var(--deck);border-ra
     <div class="mid">
       <button class="pill lit" data-k="select" id="k-select" aria-label="Sound on or off" aria-pressed="true"><span></span><em id="snd">SOUND ON</em></button>
       <button class="pill" data-k="start" id="k-start" aria-label="Start or pause"><span></span>START</button>
+      <button class="pill inst" id="k-inst" aria-label="Install the game as an app" hidden><span></span>INSTALL</button>
     </div>
     <div class="ab">
       <button class="b" data-k="b" id="k-b" aria-label="B button">B</button>
@@ -315,6 +321,17 @@ function pollPad(){
 addEventListener('keydown',e=>{ if(mode==='build'){ if(e.code==='Escape') closeBuilder(); return; } const k=KMAP[e.code]; if(k){e.preventDefault(); if(!e.repeat) setKey(k,1);}});
 addEventListener('keyup',e=>{const k=KMAP[e.code]; if(k) setKey(k,0);});
 addEventListener('blur',clearKeys);
+
+/* ---------------- install as an app ---------------- */
+// Chrome/Edge/Android fire beforeinstallprompt: show an INSTALL button. iPhone has no prompt, so the title screen
+// tells you to use Share > Add to Home Screen. The service worker (sw.js) lets the installed app play offline.
+const standalone=matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches||navigator.standalone===true;
+const isIOS=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+let installEvt=null; const instBtns=[...document.querySelectorAll('.inst')];
+addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); installEvt=e; instBtns.forEach(b=>b.hidden=false); });
+addEventListener('appinstalled',()=>{ installEvt=null; instBtns.forEach(b=>b.hidden=true); });
+instBtns.forEach(b=>b.addEventListener('click',async()=>{ if(!installEvt) return; installEvt.prompt(); try{ await installEvt.userChoice; }catch(_){} installEvt=null; instBtns.forEach(x=>x.hidden=true); }));
+if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost')) addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
 
 /* ---------------- audio ---------------- */
 let AC=null,master=null,muted=false,noiseBuf=null,keepAlive=null;
@@ -1839,7 +1856,7 @@ function drawTitle(){
     txt(k,16,y,sel?C.yellow:C.dim);
     if(typeof v==='object'){ teamChip(v,89,y-.5); txt(v.name,100,y,dim?C.dim:C.text); } else txt(String(v),100,y,dim?C.dim:v[0]==='+'?C.yellow:C.text); });
   if((tm*2|0)%2) txt('PRESS START',128,204,C.text,'center');
-  tiny('A FAN-MADE 8-BIT TRIBUTE',128,224,C.dim,'center');
+  tiny(isIOS&&!standalone&&(tm/4|0)%2?'TO INSTALL: SHARE > ADD TO HOME SCREEN':'A FAN-MADE 8-BIT TRIBUTE',128,224,C.dim,'center');
 }
 function drawOver(){
   ctx.drawImage(bgPitch,0,0,W,H);

@@ -995,8 +995,17 @@ function camUpdate(dt,now){
 let mode='title',G=null,P=null,F=null,paused=false,titleIdle=0,overT=0;
 const MENU={row:0,you:0,cpu:1,inn:0,bat:1,lvl:1,mode:0,fld:0,sea:0,net:0};
 const MODES=['GAME','HR DERBY','2 PLAYER','SEASON'];
-// derby leaderboard: set to the deployed Cloudflare Worker URL (see worker/README.md); empty = feature off
-const LB_URL='';
+// Cloudflare Worker API (worker/): the 2-player relay and the derby leaderboard. On our own domain it lives at /api;
+// ?api=<url> points elsewhere for testing. If it isn't deployed, 2 player falls back to direct WebRTC and the leaderboard stays off.
+const API_BASE=(()=>{ const m=location.search.match(/[?&]api=([^&]+)/); if(m) return decodeURIComponent(m[1]).replace(/\/$/,'');
+  return /(^|\.)wellschristmastrees\.com$/.test(location.hostname)?location.origin+'/api':''; })();
+let LB_URL='',apiProbe=null;
+function probeApi(){
+  if(!apiProbe) apiProbe=!API_BASE?Promise.resolve({}):Promise.race([
+    fetch(API_BASE+'/health',{cache:'no-store'}).then(r=>r.ok?r.json():{}).catch(()=>({})),
+    new Promise(r=>setTimeout(()=>r({}),3500))]).then(a=>{ if(a.lb) LB_URL=API_BASE; return a; });
+  return apiProbe;
+}
 // win/reach: your swing window; cpuNoise: CPU hitters' timing and eye; pitchT: CPU pitch travel time; aim/curve: CPU control; fieldSpd: CPU fielders
 const LVL=[{name:'ROOKIE',win:1.3,reach:1.15,cpuNoise:1.5,pitchT:1.12,aim:.75,curve:.5,fieldSpd:.9},
            {name:'PRO',win:1,reach:1,cpuNoise:1,pitchT:1,aim:1,curve:1,fieldSpd:1},
@@ -1888,17 +1897,47 @@ function netSend(o){ try{ if(NET.conn&&NET.conn.open) NET.conn.send(o); }catch(_
 function netKey(k,v){ netSend({t:'k',k,v}); }
 function hostRoom(){
   netReset(); NET.host=true; NET.me=0; NET.code=Array.from({length:4},()=>LETTERS[(Math.random()*26)|0]).join(''); NET.st='CONNECTING TO SERVER...'; NET.reg=false; mode='lobby';
+  setTimeout(()=>{ if(NET.host&&!NET.reg&&!NET.err) { NET.st=''; NET.err="CAN'T REACH THE GAME SERVER"; } },12000);
+  probeApi().then(a=>a.rooms?hostRelay():hostPeer());
+}
+function hostPeer(){
   loadPeer().then(()=>{
     const peer=NET.peer=new Peer(roomId(NET.code),peerOpts());
     peer.on('open',()=>{ NET.reg=true; NET.st='WAITING FOR PLAYER 2'; });
     peer.on('disconnected',()=>{ if(NET.host&&!NET.live) try{ peer.reconnect(); }catch(_){} });   // keep the code registered while waiting
-    setTimeout(()=>{ if(NET.host&&!NET.reg) { NET.st=''; NET.err="CAN'T REACH THE GAME SERVER"; } },12000);
     peer.on('error',e=>{ if(e.type==='unavailable-id'){ netReset(); hostRoom(); } else { NET.st=''; NET.err='NETWORK ERROR ('+e.type+')'; } });
     peer.on('connection',c=>{ if(NET.conn&&NET.conn.open){ c.close(); return; } NET.conn=c; c.on('open',()=>{ NET.st='CONNECTED'; }); netWire(c); });
   }).catch(()=>{ NET.err='COULD NOT LOAD ONLINE PLAY'; });
 }
 function joinRoom(code){
   netReset(); NET.guest=true; NET.me=1; NET.code=code; NET.st='CONNECTING...'; mode='lobby';
+  probeApi().then(a=>a.rooms?joinRelay(code):joinPeer(code));
+}
+// relay: a WebSocket to the Worker's room for this code, dressed up like a PeerJS connection
+function relayOpen(code,role){
+  const ws=new WebSocket(API_BASE.replace(/^http/,'ws')+'/room/'+code+'?role='+role);
+  const c={open:false,h:{},on(e,f){ (this.h[e]=this.h[e]||[]).push(f); return this; },emit(e,x){ (this.h[e]||[]).forEach(f=>f(x)); },
+    send(o){ if(ws.readyState===1) ws.send(JSON.stringify(o)); },close(){ try{ ws.close(); }catch(_){} },destroy(){ this.close(); }};
+  ws.onmessage=e=>{ let m; try{ m=JSON.parse(e.data); }catch(_){ return; }
+    if(m.t==='_ok') c.emit('reg'); else if(m.t==='_peer'){ c.open=true; c.emit('open'); } else if(m.t==='_err') c.emit('fail',m.e);
+    else if(m.t==='_left'){ if(c.open){ c.open=false; c.emit('close'); } } else c.emit('data',m); };
+  ws.onclose=()=>{ const was=c.open; c.open=false; c.emit(was?'close':'drop'); };
+  return c;
+}
+function hostRelay(){
+  const c=NET.peer=relayOpen(NET.code,'host'); netWire(c);
+  c.on('reg',()=>{ NET.reg=true; NET.st='WAITING FOR PLAYER 2'; });
+  c.on('open',()=>{ NET.conn=c; NET.st='CONNECTED'; });
+  c.on('fail',e=>{ if(e==='taken'){ netReset(); hostRoom(); } });
+  c.on('drop',()=>{ if(NET.host&&!NET.err&&!NET.live){ NET.st=''; NET.err="CAN'T REACH THE GAME SERVER"; } });
+}
+function joinRelay(code){
+  const c=NET.peer=relayOpen(code,'guest'); netWire(c);
+  c.on('open',()=>{ NET.conn=c; NET.st='CONNECTED. WAITING FOR HOST'; netSend({t:'hello',team:myTeamMsg()}); });
+  c.on('fail',e=>{ NET.st=''; NET.err=e==='full'?'THAT GAME IS FULL':'NO GAME WITH CODE '+code; NET.err2=e==='full'?'':'IS THE HOST SCREEN SHOWING THE CODE?'; });
+  c.on('drop',()=>{ if(NET.guest&&!NET.err){ NET.st=''; NET.err="CAN'T REACH THE GAME SERVER"; } });
+}
+function joinPeer(code){
   loadPeer().then(()=>{
     const peer=NET.peer=new Peer(undefined,peerOpts());
     peer.on('open',()=>{ const c=NET.conn=peer.connect(roomId(code),{reliable:true,serialization:'json'}); netWire(c);
@@ -2305,7 +2344,7 @@ async function boot(){
   try{ await Promise.race([document.fonts.load(tinyFont(8)),new Promise(r=>setTimeout(r,2500))]); }catch(_){}
   txt('LOADING',128,112,C.dim,'center');
   await new Promise(r=>setTimeout(r,20));
-  bgWorld=buildWorld(); bgPitch=buildPitchBG(); window.__ready=true;
+  bgWorld=buildWorld(); bgPitch=buildPitchBG(); window.__ready=true; probeApi();
   const sh=location.hash.match(/[#&]t=(D1[\w-]+)/);
   if(sh){ try{ history.replaceState(null,'',location.pathname+location.search); }catch(_){}
     const v=teamFromCode(sh[1]); if(v){ openBuilder(v); TB.id=null; TB.msg='A FRIEND SHARED THIS TEAM. TAP SAVE TEAM TO KEEP IT.'; renderTB(); } }

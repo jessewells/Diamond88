@@ -3,8 +3,9 @@
 //
 //   GET  /health         -> {ok, rooms, lb}  (the game probes this to decide whether to use the relay)
 //   WS   /room/ABCD?role=host|guest           2-player relay: whatever one side sends, the other receives
-//   GET  /top            -> top 10 [{n, hr, lvl, d}]          (needs the LB KV binding)
-//   POST /score {n,hr,lvl} -> updated top 10                  (needs the LB KV binding)
+//   GET  /top            -> top 10 by homers [{n, hr, lvl, d}]   (needs the LB KV binding)
+//   GET  /long           -> top 10 longest homers [{n, ft, lvl, d}]
+//   POST /score {n,hr,lvl,ft} -> updated top 10 by homers (ft = that derby's longest homer, optional)
 const ORIGINS = ['https://diamond88.wellschristmastrees.com', 'https://jessewells.github.io'];
 const MAX = 10;
 
@@ -37,6 +38,7 @@ export default {
     if (!env.LB) return json(req, { error: 'leaderboard not configured' }, 503);
     const top = (await env.LB.get('top', 'json')) || [];
     if (path === '/top' && req.method === 'GET') return json(req, top);
+    if (path === '/long' && req.method === 'GET') return json(req, (await env.LB.get('long', 'json')) || []);
 
     if (path === '/score' && req.method === 'POST') {
       // one score per IP every 20 seconds
@@ -50,6 +52,14 @@ export default {
       const hr = Number(b.hr), lvl = Number(b.lvl);
       if (!/^[A-Z]{3}$/.test(n) || !Number.isInteger(hr) || hr < 1 || hr > 60 || ![0, 1, 2].includes(lvl))
         return json(req, { error: 'bad score' }, 400);
+
+      const ft = Number(b.ft);
+      if (Number.isInteger(ft) && ft >= 300 && ft <= 700) {
+        const long = (await env.LB.get('long', 'json')) || [];
+        long.push({ n, ft, lvl, d: Date.now() });
+        long.sort((a, b) => b.ft - a.ft || b.lvl - a.lvl || a.d - b.d);
+        await env.LB.put('long', JSON.stringify(long.slice(0, MAX)));
+      }
 
       top.push({ n, hr, lvl, d: Date.now() });
       // more homers first, then the harder level, then whoever got there first

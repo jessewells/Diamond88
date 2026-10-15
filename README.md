@@ -17,4 +17,10 @@ An 8-bit baseball game for your phone, in the style of the classic NES baseball 
 - Pitcher fatigue: the ARM meter (top right) drains with pitches, hits, runs and walks, and a tired arm loses speed and control. When you're pitching, press B for the bullpen; the CPU goes to its pen on its own.
 - Box score: after a game, press left/right for each team's batting and pitching lines.
 - Settings, your teams and sound on/off are saved on the device.
+- **Share a team:** in the team builder tap SHARE THIS TEAM to send a link. Opening the link loads the team on your friend's device; IMPORT A TEAM takes a pasted link or code.
+- **Bench:** every team has 3 bench players. Before the first pitch of an at-bat press B to send up a pinch hitter. The CPU pinch-hits late in close spots.
+- **2 Player:** on a phone the batter uses the on-screen controller and the pitcher taps the buttons along the bottom of the screen. On a laptop, P1 uses WASD + G (A) / F (B) and P2 uses the arrow keys + / (A) / . (B). Two gamepads work too.
+- **Manual fielding (optional):** set FIELDING to MANUAL. Steer the fielder chasing the ball with the d-pad; once he has it, direction + A throws (right 1st, up 2nd, left 3rd, down home) and direction + B runs it to that base. Leave it alone and the fielders play it themselves.
+- **Season:** 9 games against 3 other teams with standings, season batting (AVG, HR, RBI) and pitching (IP, ERA, K), saved on the device.
+- **Derby leaderboard:** a shared top 10 once the Cloudflare Worker in `worker/` is deployed and its URL is set as `LB_URL` in `index.html` (see `worker/README.md`).
 - On iPhone, open the link, tap Share, then Add to Home Screen to play full-screen.

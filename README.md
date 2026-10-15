@@ -2,7 +2,7 @@
 
 An 8-bit baseball game for your phone, in the style of the classic NES baseball games.
 
-**Play:** https://jessewells.github.io/Diamond88/
+**Play:** https://diamond88.wellschristmastrees.com (also https://jessewells.github.io/Diamond88/, which redirects there)
 
 - Single file (`index.html`): HTML, CSS and JavaScript, no build step.
 - Phone: on-screen D-pad, A, B, START and SOUND buttons.

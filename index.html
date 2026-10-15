@@ -247,11 +247,12 @@ function shareLink(v){ return location.origin+location.pathname+'#t='+teamCode(v
 let SET=store.get('settings',{});
 function saveSettings(){
   const L=allTeams(),id=i=>L[i]?L[i].id:null;
-  store.set('settings',{mode:MENU.mode,lvl:MENU.lvl,inn:MENU.inn,bat:MENU.bat,fld:MENU.fld,park:MENU.park,time:MENU.time,wind:MENU.wind,you:id(MENU.you),cpu:id(MENU.cpu),muted,ini:SET.ini||''});
+  store.set('settings',{mode:MENU.mode,lvl:MENU.lvl,inn:MENU.inn,bat:MENU.bat,fld:MENU.fld,park:MENU.park,time:MENU.time,wind:MENU.wind,view:MENU.view,you:id(MENU.you),cpu:id(MENU.cpu),muted,ini:SET.ini||''});
 }
 function loadSettings(){
   const L=allTeams(),ix=id=>L.findIndex(t=>t.id===id),s=SET||{};
-  for(const k of ['mode','lvl','inn','bat','fld','park','time','wind']) if(Number.isInteger(s[k])) MENU[k]=s[k];
+  for(const k of ['mode','lvl','inn','bat','fld','park','time','wind','view']) if(Number.isInteger(s[k])) MENU[k]=s[k];
+  MENU.view=clamp(MENU.view,0,1);
   MENU.park=clamp(MENU.park,0,PARKS.length-1); MENU.time=clamp(MENU.time,0,1); MENU.wind=clamp(MENU.wind,0,1);
   MENU.fld=clamp(MENU.fld,0,1); MENU.mode=clamp(MENU.mode,0,MODES.length-1); MENU.lvl=clamp(MENU.lvl,0,2); MENU.inn=clamp(MENU.inn,0,2); MENU.bat=clamp(MENU.bat,0,1);
   const y=ix(s.you),c=ix(s.cpu); if(y>=0) MENU.you=y; if(c>=0&&c!==MENU.you) MENU.cpu=c;
@@ -551,6 +552,8 @@ const FSPD=[19,17,20,21,22,20,22,23,22];
 const fenceR=th=>400-70*Math.pow(Math.min(45,Math.abs(th))/45,1.6);
 const dirtR=th=>{const c=Math.cos(th*Math.PI/180);return 60*c+Math.sqrt(3600*c*c+6004);};
 const pp=(x,d,h=0)=>{const s=500/(d+25);return [128+x*s,80+(5-h)*s,s];}; // catcher's-eye pitch view
+const pr=(x,d,h=0)=>{const s=391/(d+30);return [128+x*s,13.5+(14-h)*s,s];}; // R.B.I. view: camera up high behind the plate
+const rbiView=()=>MENU.view!==1;
 const polar=(r,th)=>[r*Math.sin(th*Math.PI/180),r*Math.cos(th*Math.PI/180)];
 const lerp2=(a,b,t)=>[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t];
 // overhead field view: world canvas the camera scrolls over
@@ -1123,8 +1126,8 @@ function pitcherParts(J,k,ball,u=1){
 }
 const spr8Cache=new Map();
 function batterSprite(t,skin,frame,flip,num=0){
-  const key='RBI'+t.abbr+t.jersey+t.cap+t.pants+skin+frame+(flip?1:0); let c=spr8Cache.get(key);
-  if(!c){ c=pixelSprite(Math.ceil(43*RBI_S),Math.ceil(40*RBI_S),rbiBatterParts(BATR[frame],kit8(t,skin)),flip,false,true); spr8Cache.set(key,c); }
+  const S=batScale(),key='RBI'+t.abbr+t.jersey+t.cap+t.pants+skin+frame+(flip?1:0)+S; let c=spr8Cache.get(key);
+  if(!c){ c=pixelSprite(Math.ceil(43*S),Math.ceil(40*S),rbiBatterParts(BATR[frame],kit8(t,skin),S),flip,false,true); spr8Cache.set(key,c); }
   return c;
 }
 // R.B.I.'s pitcher is stocky: legs shortened below the hips, the upper body widened and lowered so his feet stay on the rubber
@@ -1160,7 +1163,7 @@ function rbiCatcherParts(k){
 function drawCatcher(t,skin){
   const key='CR'+t.abbr+t.jersey+t.cap+t.pants+skin; let c=spr8Cache.get(key);
   if(!c){ c=pixelSprite(32,26,rbiCatcherParts(kit8(t,skin)),false,false,true); spr8Cache.set(key,c); }
-  ctx.drawImage(c,128-16,216-17,32,26); return;   // only his head shows above the card, like the R.B.I. screen
+  if(rbiView()) ctx.drawImage(c,128-16,240-17,32,26); else ctx.drawImage(c,128-16,216-17,32,26); return;   // only his head shows above the card, like the R.B.I. screen
   ctx.drawImage(c,snap(128-16*1.15),snap(222-28*1.15),32*1.15,28*1.15);   // feet tuck behind the batter card
 }
 // R.B.I.-style batter, seen from behind: grid 40x40 (NES units), feet centred at x 16 on y 38, right-handed (faces the plate to the right).
@@ -1179,9 +1182,9 @@ const BATR_PX=2.4,BATR={
   bunt:{head:[16.5,6.5],torso:[[11,11],[22,11],[21,22],[12,22]],sN:[11.5,12],eN:[11,15],sF:[21.5,12],eF:[20,15],grip:[13.5,15.8],hB:[20.5,15.8],tip:[30,15.8],butt:[11.5,15.8],
     hipN:[13,22],kN:[11,29.5],aN:[10,37],hipF:[19.5,22],kF:[22,29.5],aF:[23,37]},
 };
-const RBI_S=2.2,RBI_DARK='#1c1820',RBI_BAT='#2b2125';
-function rbiBatterParts(J,k){
-  const s=RBI_S,f=s/1.6*1.12,q=p=>[p[0]*s,p[1]*s],P=[],L=(a,b,r0,r1,c)=>({k:'line',p:[q(a),q(b)],r0:r0*f,r1:r1*f,c});
+const RBI_S=2.2,batScale=()=>rbiView()?1.3:RBI_S,RBI_DARK='#1c1820',RBI_BAT='#2b2125';
+function rbiBatterParts(J,k,S=RBI_S){
+  const s=S,f=s/1.6*1.12,q=p=>[p[0]*s,p[1]*s],P=[],L=(a,b,r0,r1,c)=>({k:'line',p:[q(a),q(b)],r0:r0*f,r1:r1*f,c});
   const tc=(J.torso[0][0]+J.torso[1][0])/2,TO=J.torso.map(([x,y])=>[tc+(x-tc)*1.15,y]);   // a broad R.B.I. back
   const bat=()=>P.push(L(J.butt,J.tip,1.1,2,RBI_BAT));
   if(J.behind) bat();
@@ -1231,14 +1234,14 @@ function batFrame(phase,bunt){ return bunt?'bunt':phase<=0?'stance':phase<.22?'l
 let batHead=[0,0];
 function drawBatter(t,skin,hb,off,phase,bunt,num){
   // 1 sprite pixel = 1 game pixel, like the NES. His feet sit where the contact frame's bat (grid y 16.3) lands on the pitch's height.
-  const c=batterSprite(t,skin,batFrame(phase,bunt),hb<0,num),S=RBI_S,sx=128-hb*40+off*19.8,sy=pp(0,0,2.6)[1]+(38-16.3)*S;
+  const rbi=rbiView(),c=batterSprite(t,skin,batFrame(phase,bunt),hb<0,num),S=batScale(),sx=128-hb*(rbi?33:40)+off*(rbi?13:19.8),sy=(rbi?pr:pp)(0,0,2.6)[1]+(38-16.3)*S;
   const ax=(hb<0?43-16:16)*S,J=BATR[batFrame(phase,bunt)];
   ctx.imageSmoothingEnabled=false; ctx.drawImage(c,snap(sx-ax),snap(sy-38*S),c.width,c.height);
   batHead=[sx+(hb<0?-1:1)*(J.head[0]-16)*S,sy-(38-J.head[1])*S];
 }
-function drawPitcher(sx,sy,s,t,skin,frame,ball){
-  const c=pitcherSprite(t,skin,frame,ball);
-  ctx.drawImage(c,snap(sx-13*PIT_PX),snap(sy-28*PIT_PX),26*PIT_PX,30*PIT_PX);
+function drawPitcher(sx,sy,s,t,skin,frame,ball,k=1){
+  const c=pitcherSprite(t,skin,frame,ball),px=PIT_PX*k;
+  ctx.drawImage(c,snap(sx-13*px),snap(sy-28*px),26*px,30*px);
 }
 
 
@@ -1343,7 +1346,7 @@ function camUpdate(dt,now){
 
 /* ---------------- game state ---------------- */
 let mode='title',G=null,P=null,F=null,paused=false,titleIdle=0,overT=0;
-const MENU={row:0,you:0,cpu:1,inn:0,bat:1,lvl:1,mode:0,fld:0,sea:0,net:0,ntype:0,park:0,time:0,wind:0};
+const MENU={row:0,you:0,cpu:1,inn:0,bat:1,lvl:1,mode:0,fld:0,sea:0,net:0,ntype:0,park:0,time:0,wind:0,view:0};
 const MODES=['GAME','HR DERBY','2 PLAYER','SEASON','TROPHIES'];
 // Cloudflare Worker API (worker/): the 2-player relay and the derby leaderboard. On our own domain it lives at /api;
 // ?api=<url> points elsewhere for testing. If it isn't deployed, 2 player falls back to direct WebRTC and the leaderboard stays off.
@@ -2033,26 +2036,28 @@ function drawBoard(){
   ctx.fillStyle='rgba(255,255,255,.04)'; for(let i=0;i<h;i+=2) ctx.fillRect(x,y+i,w,.5);
 }
 function drawPitch(){
-  ctx.drawImage(bgPitch,0,0,W,H);
-  drawBoard(); drawWind(62,27);
+  const rbi=rbiView(),PJ=rbi?pr:pp;
   const def=G.teams[1-G.half],off=G.teams[G.half];
-  for(const i of [7,6,8,3,4,2,5]){ const [x,y]=POS0[i],q=pp(x,y); if(q[0]<-10||q[0]>W+10) continue;
-    const k=Math.max(.3,Math.round(q[2]/3.3*10)/10); shadowEll(q[0],q[1],4*k,1.3*k);
-    drawSpr(spr(def,skinOf(def.lineup[i%9][0]),'stand',x<0,true,k),q[0],q[1]); }
+  if(rbi) drawRbiField(def,off);
+  else { ctx.drawImage(bgPitch,0,0,W,H);
+    drawBoard(); drawWind(62,27);
+    for(const i of [7,6,8,3,4,2,5]){ const [x,y]=POS0[i],q=pp(x,y); if(q[0]<-10||q[0]>W+10) continue;
+      const k=Math.max(.3,Math.round(q[2]/3.3*10)/10); shadowEll(q[0],q[1],4*k,1.3*k);
+      drawSpr(spr(def,skinOf(def.lineup[i%9][0]),'stand',x<0,true,k),q[0],q[1]); } }
   let PZ='set',inHand=false;   // pitcher key frames snap like an NES sprite
   if(P.state==='windup'){ const u=Math.min(1,P.t/.6); PZ=u<.3?'set':u<.68?'kick':'cock'; inHand=u>=.68; }
   else if(P.rel!==undefined){ const r=P.rel; PZ=r<.09?'release':r<.7?'follow':'set'; }
-  const pq=pp(P.startX*.4,60.5);
+  const pq=PJ(P.startX*.4,60.5);
   shadowEll(pq[0],pq[1],5,1.4);
-  drawPitcher(pq[0],pq[1],pq[2],def,skinOf(def.pitcher.name),PZ,inHand);
-  if(humanPitching()&&P.state==='ready'){ const m=pp(P.startX,0); ctx.fillStyle=C.yellow; ctx.beginPath(); ctx.moveTo(m[0]-3,m[1]-14); ctx.lineTo(m[0]+3,m[1]-14); ctx.lineTo(m[0],m[1]-10); ctx.fill(); }
+  drawPitcher(pq[0],pq[1],pq[2],def,skinOf(def.pitcher.name),PZ,inHand,rbi?.75:1);
+  if(humanPitching()&&P.state==='ready'){ const m=PJ(P.startX,0); ctx.fillStyle=C.yellow; ctx.beginPath(); ctx.moveTo(m[0]-3,m[1]-14); ctx.lineTo(m[0]+3,m[1]-14); ctx.lineTo(m[0],m[1]-10); ctx.fill(); }
   // ball
   let bq=null,front=false,ballD=0;
   if(P.state==='flight'&&P.t<P.T+.15){
     const v=P.t/P.T; ballD=55*(1-v); const h=6*(1-v)+2.6*v+(P.type==='CHANGE'?2.2:1)*v*(1-v);
-    const sq=pp(P.ballX,ballD,0); bq=pp(P.ballX,ballD,h); shadowEll(sq[0],sq[1],Math.max(1,bq[2]*.16),Math.max(.5,bq[2]*.05));
+    const sq=PJ(P.ballX,ballD,0); bq=PJ(P.ballX,ballD,h); shadowEll(sq[0],sq[1],Math.max(1,bq[2]*.16),Math.max(.5,bq[2]*.05));
     P.trail=P.trail||[]; P.trail.push([bq[0],bq[1],Math.max(1,bq[2]*.13)]); if(P.trail.length>6) P.trail.shift();
-  } else if(P.state==='contact'){ const v=P.hitU; ballD=55*(1-v); bq=pp(P.hitX,ballD,6*(1-v)+2.6*v); P.trail=[]; }
+  } else if(P.state==='contact'){ const v=P.hitU; ballD=55*(1-v); bq=PJ(P.hitX,ballD,6*(1-v)+2.6*v); P.trail=[]; }
   else P.trail=[];
   front=bq&&ballD<.4;
   const drawBall=()=>{ if(!bq) return;
@@ -2071,6 +2076,8 @@ function drawPitch(){
     for(let i=0;i<10;i++){ const r1=4+P.t*20,r2=12+P.t*70*(i%2?.6:1); ctx.strokeStyle=i%2?'#f4c84a':'#ffffff'; ctx.lineWidth=1.5;
       ctx.beginPath(); ctx.moveTo(Math.cos(i*.628)*r1,Math.sin(i*.628)*r1); ctx.lineTo(Math.cos(i*.628)*r2,Math.sin(i*.628)*r2); ctx.stroke(); }
     ctx.restore(); }
+  if(rbi){ drawRbiPanels(def,off,bt); }
+  else {
   // runners on 1st and 3rd get R.B.I.-style windows in the lower corners
   if(!G.derby){ if(G.bases[2]) drawBaseWin(3,3,186,def,off); if(G.bases[0]) drawBaseWin(1,201,186,def,off); }
   // batter / pitcher cards, R.B.I. style: name on top, the card stats under it
@@ -2083,8 +2090,9 @@ function drawPitch(){
   for(let i=0;i<5;i++){ ctx.fillStyle=i<pw?C.yellow:'#2e2838'; ctx.fillRect(112+i*4,231,3,6); }
   txt(pc.name,252,220,C.text,'right');
   tiny(P.rel!==undefined?P.type+' '+P.mph+' MPH':'ERA '+pitchERA(pc),252,232,P.rel!==undefined?C.yellow:C.text,'right');
+  }
   if(P.state==='after'&&!P.hbp&&P.locX!==undefined){
-    const a=pp(-.95,0,3.6),b=pp(.95,0,1.6),dot=pp(P.locX,0,2.6),inZ=Math.abs(P.locX)<=.95;
+    const a=PJ(-.95,0,3.6),b=PJ(.95,0,1.6),dot=PJ(P.locX,0,2.6),inZ=Math.abs(P.locX)<=.95;
     ctx.strokeStyle='rgba(246,242,230,.7)'; ctx.lineWidth=1; ctx.setLineDash([2,2]); ctx.strokeRect(snap(a[0]),snap(a[1]),snap(b[0]-a[0]),snap(b[1]-a[1])); ctx.setLineDash([]);
     ctx.fillStyle=ART_INK; ctx.beginPath(); ctx.arc(dot[0],dot[1],4,0,7); ctx.fill();
     ctx.fillStyle=inZ?'#f4c84a':'#9ad7ff'; ctx.beginPath(); ctx.arc(dot[0],dot[1],3,0,7); ctx.fill(); }
@@ -2114,21 +2122,61 @@ function jerseyNo(name){ return 1+strHash(name+'#')%49; }
 function cardStats(b){ const r=rng(strHash(b[0]+'card')); return {avg:'.'+String(Math.round(205+b[3]*110+r()*25)).padStart(3,'0'),hr:Math.round(b[2]*b[2]*38+r()*6)}; }
 function pitchERA(p){ const r=rng(strHash(p.name+'era')); return (6.1-p.ctrl*2.4-p.velo*2.2+r()*.5).toFixed(2); }
 // a little overhead window on 1st or 3rd base: the baseman, the bag and the runner taking his lead (or running on a steal)
-function drawBaseWin(base,x,y,def,off){
-  const w=52,h=28,b=BASE[base],s=.5,cx=x+w/2,cy=y+h/2+3,S=(wx,wy)=>[cx+(wx-b[0])*s,cy-(wy-b[1])*s*.78];
-  ctx.save(); ctx.fillStyle=ART_INK; ctx.fillRect(x-1,y-1,w+2,h+2); ctx.beginPath(); ctx.rect(x,y,w,h); ctx.clip();
-  ctx.fillStyle='#4f9c46'; ctx.fillRect(x,y,w,h);
-  ctx.fillStyle='#cc9058'; ctx.beginPath(); ctx.ellipse(cx,cy,15*s*2,15*s*.78*2,0,0,7); ctx.fill();
+function drawBaseWin(base,x,y,def,off,w=52,h=28,s=.5,k=.8,big=false){
+  const b=BASE[base],cx=x+w/2,cy=y+h/2+3,S=(wx,wy)=>[cx+(wx-b[0])*s,cy-(wy-b[1])*s*.78];
+  ctx.save(); if(!big){ ctx.fillStyle=ART_INK; ctx.fillRect(x-1,y-1,w+2,h+2); } ctx.beginPath(); ctx.rect(x,y,w,h); ctx.clip();
+  ctx.fillStyle=big?RBI_GRASS:'#4f9c46'; ctx.fillRect(x,y,w,h);
+  ctx.fillStyle=big?RBI_DIRT:'#cc9058'; ctx.beginPath(); ctx.ellipse(cx,cy,15*s*2,15*s*.78*2,0,0,7); ctx.fill();
   const h0=S(0,0),hb=S(b[0]*2,b[1]*2); ctx.strokeStyle='#f6f2e6'; ctx.lineWidth=.8; ctx.beginPath(); ctx.moveTo(h0[0],h0[1]); ctx.lineTo(hb[0],hb[1]); ctx.stroke();
   const p=S(b[0],b[1]); ctx.fillStyle='#ffffff'; ctx.fillRect(p[0]-1.5,p[1]-1,3,2);
   // runner leads toward the next base; on a steal he's on his way
   const nx=BASE[base+1],dx=nx[0]-b[0],dy=nx[1]-b[1],L=hyp(dx,dy); let lead=16,mv=false;
   if(P.steal&&P.steal.who.includes(base)){ const t=stealRel()-P.steal.rel; if(t>0){ lead=Math.min(80,10+t*22); mv=true; } }
   const ri=G.bases[base-1],rp=[b[0]+dx/L*lead,b[1]+dy/L*lead],fp=base===1?[b[0]+19,b[1]+13]:[b[0]-19,b[1]+13];
-  const ents=[{p:fp,c:spr(def,skinOf(def.lineup[(base===1?2:5)%9][0]),'stand',base===1,true,.8)},
-    {p:rp,c:spr(off,skinOf(ri[0]),mv?'run'+'ABCD'[(performance.now()/80|0)%4]:'stand',dx<0,false,.8)}];
-  ents.sort((a,b2)=>b2.p[1]-a.p[1]).forEach(e=>{ const q=S(e.p[0],e.p[1]); shadowEll(q[0],q[1],3,1); drawSpr(e.c,q[0],q[1]); });
-  ctx.restore(); tiny(base===1?'1ST':'3RD',x+2,y+h-6,'#ffffff');
+  const ents=[{p:fp,c:spr(def,skinOf(def.lineup[(base===1?2:5)%9][0]),'stand',base===1,true,k)}];
+  if(ri) ents.push({p:rp,c:spr(off,skinOf(ri[0]),mv?'run'+'ABCD'[(performance.now()/80|0)%4]:'stand',dx<0,false,k)});
+  ents.sort((a,b2)=>b2.p[1]-a.p[1]).forEach(e=>{ const q=S(e.p[0],e.p[1]); shadowEll(q[0],q[1],3*k/.8,1); drawSpr(e.c,q[0],q[1]); });
+  ctx.restore(); if(!big) tiny(base===1?'1ST':'3RD',x+2,y+h-6,'#ffffff');
+}
+/* ---------- R.B.I. batting screen: the pitch in a centre panel, 3rd and 1st base in side panels, stats underneath ---------- */
+const RBI_GRASS='#3f9b2a',RBI_DIRT='#c4642a',RBI_L=74,RBI_R=182;
+function drawRbiField(def,off){
+  ctx.fillStyle='#000'; ctx.fillRect(0,0,W,H);
+  ctx.save(); ctx.beginPath(); ctx.rect(RBI_L+2,0,RBI_R-RBI_L-4,H); ctx.clip();
+  ctx.fillStyle=RBI_GRASS; ctx.fillRect(0,0,W,H);
+  const poly=(pts,col)=>{ ctx.fillStyle=col; ctx.beginPath(); pts.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1])); ctx.closePath(); ctx.fill(); };
+  const circ=(cd,r)=>{ const pts=[]; for(let a=0;a<6.29;a+=.12) pts.push(pr(r*Math.cos(a),cd+r*Math.sin(a))); return pts; };
+  poly(circ(127.28,11),RBI_DIRT); poly(circ(60.5,9.5),RBI_DIRT); poly(circ(0,15),RBI_DIRT);
+  const ln=(a,b,w=1.2)=>{ ctx.strokeStyle='#f6f2e6'; ctx.lineWidth=w; ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); ctx.stroke(); };
+  ln(pr(0,0),pr(-110,110)); ln(pr(0,0),pr(110,110));
+  for(const sg of [-1,1]){ const x0=sg*1.21,x1=sg*5.21; ln(pr(x0,-3),pr(x0,3),1.6); ln(pr(x1,-3),pr(x1,3),1.6); ln(pr(x0,3),pr(x1,3),1.6); ln(pr(x0,-3),pr(x1,-3),1.6); }
+  poly([pr(-.71,0),pr(.71,0),pr(.71,-.71),pr(0,-1.42),pr(-.71,-.71)],'#ffffff');
+  const rb=pr(0,60.5); ctx.fillStyle='#ffffff'; ctx.fillRect(rb[0]-4,rb[1]-.5,8,1.5);
+  const sb=pr(0,127.28); ctx.fillRect(sb[0]-2,sb[1]-1,4,2);
+  if(G.bases[1]&&!G.derby){ const ri=G.bases[1],q=pr(-8,124); drawSpr(spr(off,skinOf(ri[0]),'stand',true,false,.55),q[0],q[1]); }
+  ctx.restore();
+}
+function drawRbiPanels(def,off,bt){
+  ctx.fillStyle='#000'; ctx.fillRect(0,0,RBI_L,H); ctx.fillRect(RBI_R,0,W-RBI_R,H);
+  drawBaseWin(3,0,0,def,off,RBI_L,104,.62,.85,true); drawBaseWin(1,RBI_R,0,def,off,W-RBI_R,104,.62,.85,true);
+  const box=(x,y,w,h)=>{ ctx.fillStyle='#000'; ctx.fillRect(x,y,w,h); ctx.strokeStyle='#ffffff'; ctx.lineWidth=1; ctx.strokeRect(x+.5,y+.5,w-1,h-1); };
+  const d=G.derby,[a,hm]=G.teams;
+  if(d){ box(4,110,66,48);
+    if(d.two){ txt('DERBY',8,114); txt(a.abbr+String(d.two.hr[0]).padStart(3),8,126); txt(hm.abbr+String(d.two.hr[1]).padStart(3),8,138); }
+    else { txt('DERBY',8,114); txt('HR '+d.hr,8,126); txt('BEST '+d.best,8,138); }
+    tiny('OUTS',8,150,C.red); txt(d.outs+'/'+d.max,66,148,C.red,'right'); }
+  else { box(4,110,66,36); txt((G.half?'BOT':'TOP')+' '+G.inning,8,114); txt(a.abbr.slice(0,3)+String(G.score[0]).padStart(4),8,124); txt(hm.abbr.slice(0,3)+String(G.score[1]).padStart(4),8,134);
+    box(4,150,66,32); txt('B'+String(G.balls).padStart(6),8,154); txt('S'+String(G.strikes).padStart(6),8,163); txt('O'+String(G.outs).padStart(6),8,172); }
+  ctx.fillStyle='#ffffff'; ctx.fillRect(3,188,68,1.5); ctx.fillRect(RBI_R+3,188,W-RBI_R-6,1.5);
+  const cs=cardStats(bt),pc=def.pitcher;
+  txt(String(G.ab[G.half]%9+1),4,194,C.yellow); txt(bt[0].slice(0,7),14,194);
+  txt('AVG'+cs.avg,6,208); txt('HR  '+cs.hr,6,218); tiny(bt[1]==='L'?'BATS L':'BATS R',6,230,C.dim);
+  txt('P',RBI_R+4,194,C.yellow); txt(pc.name.slice(0,7),RBI_R+14,194);
+  txt('ERA'+pitchERA(pc),RBI_R+6,208);
+  if(P.rel!==undefined) tiny(P.type+' '+P.mph,RBI_R+6,220,C.yellow);
+  if(!d){ const f=fatigue(G.arm[1-G.half]),n=Math.ceil((1-f)*5-.001),col=f<.4?'#5fd06a':f<.7?'#f4c84a':'#e2483b';
+    tiny('ARM',RBI_R+6,230,C.dim); for(let i=0;i<5;i++){ ctx.fillStyle=i<n?col:'#2e2838'; ctx.fillRect(RBI_R+22+i*6,230,5,4); } }
+  if(G.venue&&G.venue.mph) drawWind(RBI_R+24,160);
 }
 function drawField(){
   const sx0=clamp(Math.round(CAM.x*RS),0,(WW-W)*RS),sy0=clamp(Math.round((CAM.y+22)*RS),0,(WH-218)*RS);
@@ -2197,7 +2245,7 @@ function drawTitle(){
   bigText("'88",150,46,16,'#ffb39f','#d8382c','#3a0d0a');
   drawSpinBall(104,54,9,tm);
   const rows=menuRows(),lk=seaLocked();
-  const sp=rows.length>7?11:14,y0=rows.length>7?80:90;
+  const sp=rows.length>10?10:rows.length>7?11:14,y0=rows.length>7?80:90;
   panel(8,y0,240,rows.length*sp+6);
   rows.forEach(([key,k,v],i)=>{ const y=y0+5+i*sp,sel=MENU.row===i,dim=lk&&['lvl','you','inn'].includes(key);
     if(sel){ ctx.fillStyle='rgba(244,200,74,.12)'; ctx.fillRect(10,y-(sp-8)/2-1,236,sp-1); ctx.fillStyle=C.yellow; ctx.fillRect(10,y-(sp-8)/2-1,2,sp-1); }
@@ -2282,8 +2330,8 @@ function menuRows(){
   const m=MENU.mode,AT=allTeams(),lk=seaLocked();
   const R={mode:['MODE',MODES[m]],lvl:['LEVEL',LVL[lk?SEA.lvl:MENU.lvl].name],you:['YOU',lk?(AT[seaIdx(SEA.teams[0])]||'?'):(AT[MENU.you]||'+ NEW TEAM')],
     cpu:[m===1?'PITCHER':m===2?'P2':'CPU',AT[MENU.cpu]],inn:['INNINGS',INN[lk?SEA.inn:MENU.inn]],bat:['YOU BAT',MENU.bat?'2ND (HOME)':'1ST (AWAY)'],
-    fld:['FIELDING',MENU.fld?'MANUAL':'AUTO'],park:['PARK',PARKS[MENU.park]],lb:['LEADERS',LB_URL?'VIEW TOP 10':'OFFLINE'],time:['TIME',MENU.time?'DAY':'NIGHT'],wind:['WIND',MENU.wind?'WINDY':'CALM'],net:['ONLINE',['HOST A GAME','JOIN A GAME','FIND A MATCH'][MENU.net]],ntype:['PLAY',MENU.ntype?'HR DERBY':'GAME'],sea:['SEASON',SEA&&SEA.g<SEA.sched.length?(MENU.sea?'START NEW':'CONTINUE '+(SEA.g+1)+'/'+SEA.sched.length):'NEW']};
-  const V=['park','time','wind'];
+    fld:['FIELDING',MENU.fld?'MANUAL':'AUTO'],park:['PARK',PARKS[MENU.park]],view:['VIEW',MENU.view?'STADIUM':'R.B.I.'],lb:['LEADERS',LB_URL?'VIEW TOP 10':'OFFLINE'],time:['TIME',MENU.time?'DAY':'NIGHT'],wind:['WIND',MENU.wind?'WINDY':'CALM'],net:['ONLINE',['HOST A GAME','JOIN A GAME','FIND A MATCH'][MENU.net]],ntype:['PLAY',MENU.ntype?'HR DERBY':'GAME'],sea:['SEASON',SEA&&SEA.g<SEA.sched.length?(MENU.sea?'START NEW':'CONTINUE '+(SEA.g+1)+'/'+SEA.sched.length):'NEW']};
+  const V=['view','park','time','wind'];
   if(m===4) return [['mode',...R.mode],['ach','UNLOCKED',achCount()+' OF '+ACHS.length]];
   const keys=m===0?['mode','lvl','you','cpu','inn','bat','fld',...V]:m===1?['mode','lvl','you','cpu',...V,'lb']:m===2?(MENU.net===1?['mode','net','you']:MENU.ntype?['mode','net','ntype','you',...V]:['mode','net','ntype','you','inn','bat','fld',...V]):['mode','sea','lvl','you','inn','fld',...V];
   return keys.map(k=>[k,...R[k]]);
@@ -2312,6 +2360,7 @@ function updateTitle(dt){
     if(key==='park'||key==='time'){ if(key==='park') MENU.park=(MENU.park+ch+PARKS.length)%PARKS.length; else MENU.time=1-MENU.time;
       clearTimeout(MENU.vt); MENU.vt=setTimeout(()=>{ if(mode==='title') setVenue(MENU.park,MENU.time); },120); }
     if(key==='wind') MENU.wind=1-MENU.wind;
+    if(key==='view') MENU.view=1-MENU.view;
     saveSettings();
   }
   const L=allTeams(),you=L[MENU.you];
@@ -2856,7 +2905,7 @@ function draw(){
   else if(mode==='lbview'){ ctx.drawImage(bgPitch,0,0,W,H); ctx.fillStyle='rgba(6,5,12,.8)'; ctx.fillRect(0,0,W,H); drawLb(); }
   else if(mode==='lobby') drawLobby();
   else if(mode==='over') drawOver();
-  else { if(G.phase==='field'&&F) drawField(); else if(G.phase==='streak'&&ST) drawStreak(); else drawPitch(); drawHUD(); }
+  else { if(G.phase==='field'&&F){ drawField(); drawHUD(); } else if(G.phase==='streak'&&ST){ drawStreak(); drawHUD(); } else { drawPitch(); if(!rbiView()) drawHUD(); } }
   drawFXScreen();
   if(mode==='play'){
     if(G.banner) drawBanner();
@@ -2879,6 +2928,7 @@ function hint(){
   else if(mode==='season') h=`${L.A} play the next game · ${L.lr} standings and stats · ${L.B} menu`;
   else if(mode==='title'){ const yt=allTeams()[MENU.you],rk=(menuRows()[MENU.row]||[])[0];
     h=rk==='net'&&MENU.net===2?'FIND A MATCH: get paired with anyone else looking for a game right now.':rk==='mode'&&MENU.mode===4?`TROPHIES: ${achCount()} of ${ACHS.length} unlocked. ${L.S} to see them all.`:rk==='mode'?(MENU.mode===2?'2 PLAYER: online, each player on their own phone or laptop. One hosts, the other joins with the code.':MENU.mode===3?'SEASON: 9 games against 3 teams, with standings and season stats.':`${L.lr} change mode · ${L.S} to play`)
+      :rk==='view'?'R.B.I.: the classic batting screen with 3rd and 1st base on the sides. STADIUM: the big ballpark view with the crowd.'
       :rk==='park'?'WELLS FARM: a tree-farm ballpark with The Pines coffee stand and the big red barn past the fence.'
       :rk==='time'?'DAY or NIGHT game (at night the farm trees light up).'
       :rk==='lb'?(LB_URL?`${L.A} to see the top 10 derby scores and the longest homers`:'The leaderboard needs the game server (worker/).')

@@ -32,6 +32,7 @@
   color-scheme:dark;
 }
 html,body{height:100%}
+html{touch-action:manipulation}
 body{margin:0;background:var(--bezel);color:var(--ink);font-family:var(--f-display);overflow:hidden;
   touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
 .app{box-sizing:border-box;height:100%;max-width:560px;margin:0 auto;padding-inline:16px;padding-block:10px 14px;
@@ -359,6 +360,18 @@ function audioInit(){
   try{ if(!keepAlive){ keepAlive=new Audio(silentWav()); keepAlive.loop=true; keepAlive.setAttribute('playsinline',''); } if(keepAlive.paused) keepAlive.play().catch(()=>{}); }catch(_){}
 }
 ['touchend','click','keydown','pointerup'].forEach(t=>addEventListener(t,audioInit,{capture:true,passive:true}));
+// iOS Safari ignores user-scalable=no: block double-tap and pinch zoom on the game (the team builder keeps normal touch)
+const inBuilder=e=>!!(e.target&&e.target.closest&&e.target.closest('.tb'));
+let lastTouchEnd=0;
+document.addEventListener('touchend',e=>{ if(inBuilder(e)) return; const now=e.timeStamp; if(now-lastTouchEnd<400) e.preventDefault(); lastTouchEnd=now; },{passive:false});
+['gesturestart','gesturechange'].forEach(t=>document.addEventListener(t,e=>{ if(!inBuilder(e)) e.preventDefault(); },{passive:false}));
+document.addEventListener('dblclick',e=>{ if(!inBuilder(e)) e.preventDefault(); });
+// if the page still ends up zoomed in, snap it back to 1x (re-applying the viewport makes iOS reset the zoom)
+if(window.visualViewport) visualViewport.addEventListener('resize',()=>{
+  const m=document.querySelector('meta[name=viewport]'),a=document.activeElement;
+  if(!m||visualViewport.scale<=1.01||(a&&a.closest&&a.closest('.tb'))) return;
+  const c=m.content; m.content='width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,viewport-fit=cover'; setTimeout(()=>{ m.content=c; },400);
+});
 /* ---------- NES-style sound chip: 2 pulse channels, stepped triangle, LFSR noise, 60 Hz envelopes ---------- */
 const CPU=1789773,FR=1/60,NOISE_P=[4,8,16,32,64,96,128,160,202,254,380,508,762,1016,2034,4068];
 const nesF=f=>{ const p=Math.max(8,Math.round(CPU/(16*f)-1)); return CPU/(16*(p+1)); };   // snap to the chip's period table

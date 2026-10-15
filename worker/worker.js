@@ -6,6 +6,10 @@
 //   GET  /top            -> top 10 by homers [{n, hr, lvl, d}]   (needs the LB KV binding)
 //   GET  /long           -> top 10 longest homers [{n, ft, lvl, d}]
 //   POST /score {n,hr,lvl,ft} -> updated top 10 by homers (ft = that derby's longest homer, optional)
+//   POST /match {op,id,kind,code}         "find a match": pairs two players and hands each a room code
+//        op 'find'   -> {role:'host'|'guest', code}   (host: open that room and wait; guest: join it)
+//        op 'keep'   -> {waiting}  the waiting host checks in every ~10 s; a host silent for 30 s is dropped
+//        op 'cancel' -> {waiting}  the host gave up
 const ORIGINS = ['https://diamond88.wellschristmastrees.com', 'https://jessewells.github.io'];
 const MAX = 10;
 
@@ -33,6 +37,13 @@ export default {
       if (!env.ROOMS) return json(req, { error: 'relay not configured' }, 503);
       if (req.headers.get('upgrade') !== 'websocket') return json(req, { error: 'expected websocket' }, 426);
       return env.ROOMS.get(env.ROOMS.idFromName(room[1])).fetch(req);
+    }
+
+    if (path === '/match' && req.method === 'POST') {
+      if (!env.ROOMS) return json(req, { error: 'relay not configured' }, 503);
+      // one Durable Object instance acts as the matchmaking lobby, so pairing is never racy
+      const r = await env.ROOMS.get(env.ROOMS.idFromName('__lobby__')).fetch('https://lobby/match', { method: 'POST', body: await req.text() });
+      return json(req, await r.json(), r.status);
     }
 
     if (!env.LB) return json(req, { error: 'leaderboard not configured' }, 503);
@@ -78,6 +89,7 @@ export class Room {
   constructor(state) { this.state = state; }
 
   async fetch(req) {
+    if (new URL(req.url).pathname === '/match') return this.match(req);
     const role = new URL(req.url).searchParams.get('role') === 'host' ? 'host' : 'guest';
     const n = r => this.state.getWebSockets(r).length;
     // turned-away sockets get the tag "x" so closing them doesn't disturb the real players
@@ -93,6 +105,23 @@ export class Room {
       for (const h of this.state.getWebSockets('host')) say(h, { t: '_peer' });
     }
     return new Response(null, { status: 101, webSocket: client });
+  }
+
+  // matchmaking lobby (only the '__lobby__' instance gets these): one waiting host per kind ('g' game, 'd' derby)
+  async match(req) {
+    let b; try { b = await req.json(); } catch { return Response.json({ error: 'bad json' }, { status: 400 }); }
+    const kind = b.kind === 'd' ? 'd' : 'g', key = 'w:' + kind, id = String(b.id || '').slice(0, 40), now = Date.now();
+    const w = await this.state.storage.get(key);
+    if (b.op === 'keep' || b.op === 'cancel') {
+      if (!w || w.code !== b.code || w.id !== id) return Response.json({ waiting: false });
+      if (b.op === 'keep') { w.t = now; await this.state.storage.put(key, w); } else await this.state.storage.delete(key);
+      return Response.json({ waiting: b.op === 'keep' });
+    }
+    if (!id) return Response.json({ error: 'missing id' }, { status: 400 });
+    if (w && now - w.t < 30000 && w.id !== id) { await this.state.storage.delete(key); return Response.json({ role: 'guest', code: w.code }); }
+    const code = Array.from({ length: 4 }, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join('');
+    await this.state.storage.put(key, { code, id, t: now });
+    return Response.json({ role: 'host', code });
   }
 
   webSocketMessage(ws, msg) {

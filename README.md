@@ -25,4 +25,10 @@ An 8-bit baseball game for your phone, in the style of the classic NES baseball 
 - **Season:** 9 games against 3 other teams with standings, season batting (AVG, HR, RBI) and pitching (IP, ERA, K), saved on the device.
 - **Homer distance:** every home run shows how far it carried; the longest (490+ ft) sail out of the park. The derby leaderboard has a second page for the 10 longest homers.
 - **Derby leaderboard + 2-player relay:** the Cloudflare Worker in `worker/` (deploy steps in `worker/README.md`) runs both at `/api`. The game finds it automatically.
-- On iPhone, open the link, tap Share, then Add to Home Screen to play full-screen.
+- **Install it:** on Android or desktop Chrome/Edge tap **INSTALL** (under START). On iPhone tap Share, then Add to Home Screen. The installed app opens full-screen and plays offline (`sw.js` caches it; online play and the leaderboard still need a connection).
+- **Ballparks:** PARK on the title menu picks **Diamond Stadium** or **Wells Farm** (Christmas-tree rows past a wooden fence, The Pines coffee stand and the red barn; the trees light up at night). TIME picks a day or night game.
+- **Wind:** WIND set to WINDY gives each game a random 5-18 mph wind; blowing out carries fly balls farther, blowing in knocks them down. A gauge shows the direction.
+- **Sound:** ballpark organ (CHARGE, a LET'S GO chant, DE-FENSE, the 7th-inning stretch), walk-up music for home batters and a crowd murmur under the game.
+- **Controllers and vibration:** controller rumble (Chrome/Edge) and Android phone vibration on contact, catches, outs and homers; they go quiet with the sound off.
+- **Trophies:** 20 achievements (the cycle, a no-hitter, a grand slam, a 450-ft homer, derby king, a pennant...). Pick TROPHIES on the title menu to see them.
+- **Find a match:** 2 PLAYER → ONLINE → FIND A MATCH pairs you with anyone else looking right now, no code needed (needs the Worker).

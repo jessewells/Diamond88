@@ -1122,9 +1122,9 @@ function pitcherParts(J,k,ball,u=1){
   return P;
 }
 const spr8Cache=new Map();
-function batterSprite(t,skin,frame,flip){
-  const key='B'+t.abbr+t.jersey+t.cap+t.pants+skin+frame+(flip?1:0); let c=spr8Cache.get(key);
-  if(!c){ c=pixelSprite(44*SPR_U,42*SPR_U,batterParts(BAT8[frame],kit8(t,skin),SPR_U),flip,SPR_U>1); spr8Cache.set(key,c); }
+function batterSprite(t,skin,frame,flip,num=0){
+  const key='R'+t.abbr+t.jersey+t.cap+t.pants+skin+frame+(flip?1:0)+'#'+num; let c=spr8Cache.get(key);
+  if(!c){ c=pixelSprite(40*SPR_U,40*SPR_U,rearBatterParts(BATR[frame],kit8(t,skin),SPR_U,num,flip),flip,SPR_U>1); spr8Cache.set(key,c); }
   return c;
 }
 function pitcherSprite(t,skin,frame,ball){
@@ -1143,7 +1143,7 @@ function catcherParts(k,glove){
     L([10,11.5],[22,19],.5,.5,k.capD,{flat:1}),L([22,11.5],[10,19],.5,.5,k.capD,{flat:1}),       // chest-protector straps
     {k:'rect',x:9,y:19,w:14,h:2,c:k.pan},
     L([9.5,11.5],[6,15.5],1.7,1.5,k.jerD,{sep:1}),L([6,15.5],[7,20],1.4,1.3,k.skinD,{sep:1}),   // throwing hand tucked on his knee
-    {k:'disc',x:16,y:6.5,r:5,c:k.cap},{k:'rect',x:11,y:9,w:10,h:2,c:k.capD},                   // helmet on backwards
+    {k:'disc',x:16,y:6.5,r:5,c:'#24202b'},{k:'rect',x:11,y:9,w:10,h:2,c:'#15121a'},             // dark catcher's helmet, mask straps
     {k:'rect',x:14,y:3,w:2,h:2,c:'#ffffff',flat:1},
     L([22.5,11.5],[26,8.5],1.7,1.5,k.jer,{sep:1}),                                            // glove arm up, mitt showing the target
     {k:'disc',x:26.5,y:6.5,r:3.6,c:k.mitt,sep:1},{k:'disc',x:27.3,y:6,r:1.6,c:k.mittD,flat:1},
@@ -1153,15 +1153,61 @@ function catcherParts(k,glove){
 function drawCatcher(t,skin){
   const key='C'+t.abbr+t.jersey+t.cap+t.pants+skin; let c=spr8Cache.get(key);
   if(!c){ c=pixelSprite(32,28,catcherParts(kit8(t,skin)),false,true); spr8Cache.set(key,c); }
-  ctx.drawImage(c,snap(128-16*1.5),snap(224-28*1.5),32*1.5,28*1.5);   // feet tuck behind the batter card
+  ctx.drawImage(c,snap(128-16*1.15),snap(222-28*1.15),32*1.15,28*1.15);   // feet tuck behind the batter card
+}
+// R.B.I.-style batter, seen from behind: grid 40x40 (NES units), feet centred at x 16 on y 38, right-handed (faces the plate to the right).
+// The contact frame holds the bat at grid y 16.3, which lands on the pitch's height (2.6 ft) at BATR_PX game px per unit.
+const BATR_PX=2.4,BATR={
+  stance:{head:[16,6.5],torso:[[10.5,11],[21.5,11],[20.5,22],[11.5,22]],sN:[11,12],eN:[8,14.5],sF:[21,12],eF:[15,15],grip:[10,9.5],hB:[11,8.3],tip:[5.5,0],butt:[9.4,10.4],
+    hipN:[13,22],kN:[10,29.5],aN:[9,37],hipF:[19,22],kF:[22,29.5],aF:[23,37]},
+  load:{head:[15.5,6.8],torso:[[10,11.3],[21,11.3],[20.5,22],[11.5,22]],sN:[10.5,12.3],eN:[7,14],sF:[20.5,12.3],eF:[14,15],grip:[8.5,10.5],hB:[9.6,9.3],tip:[2.5,2.5],butt:[7.8,11.3],
+    hipN:[13,22],kN:[10,29.5],aN:[9,37],hipF:[19,22],kF:[21.5,28],aF:[22.5,35.5]},
+  contact:{head:[18,7],torso:[[12,11.5],[23,11.5],[21.5,22],[12.5,22]],sN:[13,12.5],eN:[18,16],sF:[22,12.5],eF:[24.5,15],grip:[23.5,16.3],hB:[25.2,16.3],tip:[38,16.3],butt:[22.3,16.3],
+    hipN:[13.5,22],kN:[11,30],aN:[9.5,37],hipF:[20,22],kF:[24,29],aF:[25,37]},
+  extend:{head:[18,7],torso:[[12,11.5],[23,11.5],[21.5,22],[12.5,22]],sN:[13,12.5],eN:[19,14],sF:[22,12.5],eF:[25,12.5],grip:[24,12],hB:[25,11],tip:[32,4],butt:[23.2,13],
+    hipN:[13.5,22],kN:[11.5,30],aN:[10,37],hipF:[20,22],kF:[24,29],aF:[25,37]},
+  follow:{head:[18,7],torso:[[12,11.5],[23,11.5],[21.5,22],[12.5,22]],sN:[13,12.5],eN:[16,10],sF:[22,12.5],eF:[18,10.5],grip:[12.5,9],hB:[11.5,9.5],tip:[2,14],butt:[13.5,8.4],behind:1,
+    hipN:[14,22],kN:[12.5,30],aN:[11,37],hipF:[20,22],kF:[24,29],aF:[25,37]},
+  bunt:{head:[16.5,6.5],torso:[[11,11],[22,11],[21,22],[12,22]],sN:[11.5,12],eN:[11,15],sF:[21.5,12],eF:[20,15],grip:[13.5,15.8],hB:[20.5,15.8],tip:[30,15.8],butt:[11.5,15.8],
+    hipN:[13,22],kN:[11,29.5],aN:[10,37],hipF:[19.5,22],kF:[22,29.5],aF:[23,37]},
+};
+// 3x5 digits for the number on the back
+const DIG=['111101101101111','010110010010111','111001111100111','111001111001111','101101111001001','111100111001111','111100111101111','111001010010010','111101111101111','111101111001111'];
+function rearBatterParts(J,k,u,num,flip){
+  const P=[],q=p=>qU(p,u),R=Math.round,hB=J.hB;
+  const bat=()=>{ P.push({k:'line',p:[q(J.butt),q(J.tip)],r0:.55*u,r1:1.05*u,c:k.bat,noSep:1},{k:'line',p:[q(J.butt),q(lerp2(J.butt,J.tip,.28))],r0:.5*u,r1:.55*u,c:k.batD,noSep:1},
+    {k:'line',p:[q(lerp2(J.butt,J.tip,.4)),q(lerp2(J.butt,J.tip,.93))],r0:.3,r1:.45,c:k.batH,noSep:1,flat:1}); };
+  if(J.behind) bat();
+  arm8(P,J.sF,J.eF,hB,k,true,1,1.3,u);                                   // far arm, mostly behind his back
+  leg8(P,J.hipN,J.kN,J.aN,k,false,1,1.5,u); leg8(P,J.hipF,J.kF,J.aF,k,false,1,1.5,u);
+  P.push({k:'line',p:[q([J.head[0],J.head[1]+2.5]),q([J.head[0],J.torso[0][1]+.6])],r0:1.3*u,r1:1.4*u,c:k.skinD});
+  P.push({k:'poly',p:J.torso.map(q),c:k.jer,c2:k.jerD,shadeX:(J.torso[0][0]+3)*u});
+  const t=J.torso,bx=R((t[3][0])*u),by=R(t[3][1]*u)-u;                  // belt
+  P.push({k:'rect',x:bx,y:by,w:R((t[2][0]-t[3][0])*u)+1,h:u,c:'#1d1922',flat:1});
+  const cx=(t[0][0]+t[1][0])/2,ny=t[0][1]+2.2;                          // number on the back
+  // a lefty's sprite gets mirrored, so pre-mirror his number to read right way round
+  const ds=String(num).split(''); if(flip) ds.reverse();
+  ds.forEach((d,i,a)=>{ const x0=R((cx-(a.length*4-1)/2+i*4)*u),y0=R(ny*u);
+    for(let r=0;r<5;r++) for(let c=0;c<3;c++) if(DIG[+d][r*3+(flip?2-c:c)]==='1') P.push({k:'rect',x:x0+c*u,y:y0+r*u,w:u,h:u,c:k.pan,flat:1}); });
+  // back of the batting helmet, the neck under it, the ear flap toward the catcher
+  P.push({k:'disc',x:J.head[0]*u,y:(J.head[1]+.4)*u,r:3.4*u,c:k.skin});
+  P.push({k:'disc',x:J.head[0]*u,y:(J.head[1]-.4)*u,r:3.9*u,c:k.cap,maxY:R((J.head[1]+1.9)*u)},
+         {k:'disc',x:(J.head[0]-2.4)*u,y:(J.head[1]+1.6)*u,r:1.7*u,c:k.cap},
+         {k:'rect',x:R((J.head[0]-1.2)*u),y:R((J.head[1]-3.6)*u),w:4,h:1,c:'#ffffff',flat:1},{k:'rect',x:R((J.head[0]-2)*u),y:R((J.head[1]-3)*u),w:1,h:2,c:k.cap2,flat:1});
+  if(!J.behind) bat();
+  P.push({k:'disc',x:J.grip[0]*u,y:J.grip[1]*u,r:1.35*u,c:k.glv,sep:1},{k:'disc',x:hB[0]*u,y:hB[1]*u,r:1.35*u,c:k.glv,sep:1});
+  arm8(P,J.sN,J.eN,J.grip,k,false,1,1.35,u);                             // near arm over the top
+  return P;
 }
 const BAT_PX=3,PIT_PX=1.5;   // game pixels per NES-grid pixel; the sprites are drawn SPR_U times finer than that
 const SPR_U=2;
 function batFrame(phase,bunt){ return bunt?'bunt':phase<=0?'stance':phase<.22?'load':phase<.5?'contact':phase<.72?'extend':'follow'; }
-function drawBatter(t,skin,hb,off,phase,bunt){
-  const [sx,sy]=pp(-hb*2.9+off,.3),c=batterSprite(t,skin,batFrame(phase,bunt),hb<0);
-  const ax=hb<0?44-15.5:15.5;   // feet centre in the sprite
-  ctx.imageSmoothingEnabled=false; ctx.drawImage(c,snap(sx-ax*BAT_PX),snap(sy-39*BAT_PX),44*BAT_PX,42*BAT_PX);
+let batHead=[0,0];
+function drawBatter(t,skin,hb,off,phase,bunt,num){
+  const [sx,sy]=pp(-hb*2.2+off,.3),c=batterSprite(t,skin,batFrame(phase,bunt),hb<0,num);
+  const ax=hb<0?40-16:16,J=BATR[batFrame(phase,bunt)];   // feet centre in the sprite
+  ctx.imageSmoothingEnabled=false; ctx.drawImage(c,snap(sx-ax*BATR_PX),snap(sy-38*BATR_PX),40*BATR_PX,40*BATR_PX);
+  batHead=[sx+(hb<0?-1:1)*(J.head[0]-16)*BATR_PX,sy-(38-J.head[1])*BATR_PX];
 }
 function drawPitcher(sx,sy,s,t,skin,frame,ball){
   const c=pitcherSprite(t,skin,frame,ball);
@@ -1987,10 +2033,10 @@ function drawPitch(){
     ctx.globalAlpha=1; drawBallArt(bq[0],bq[1],Math.max(1,bq[2]*.13),P.t*30); };
   if(!front) drawBall();
   const bt=curBatter(),phase=P.swingT<0?0:Math.min(1,P.swingT/.2);
-  if(P.hbp){ const k=Math.min(1,P.t*4); drawBatter(off,skinOf(bt[0]),P.hb,P.off-P.hb*.6*k,0,false);
-    const hd=pp(-P.hb*2.9+P.off-P.hb*.6*k,.3,6.3);
-    for(let i=0;i<3;i++){ const a=P.t*6+i*2.1; drawStar(hd[0]+Math.cos(a)*12,hd[1]+Math.sin(a)*3); } }
-  else drawBatter(off,skinOf(bt[0]),P.hb,P.off,P.swing&&P.swing.bunt?.42:phase,!!(P.swing&&P.swing.bunt));
+  const num=jerseyNo(bt[0]);
+  if(P.hbp){ const k=Math.min(1,P.t*4); drawBatter(off,skinOf(bt[0]),P.hb,P.off-P.hb*.6*k,0,false,num);
+    for(let i=0;i<3;i++){ const a=P.t*6+i*2.1; drawStar(batHead[0]+Math.cos(a)*12,batHead[1]-8+Math.sin(a)*3); } }
+  else drawBatter(off,skinOf(bt[0]),P.hb,P.off,P.swing&&P.swing.bunt?.42:phase,!!(P.swing&&P.swing.bunt),num);
   drawCatcher(def,skinOf(def.lineup[1][0]));
   if(front) drawBall();
   if(P.state==='contact'&&bq){ const a=P.t*9;
@@ -2037,6 +2083,7 @@ function drawPitch(){
     ctx.globalAlpha=1; }
 }
 // card stats like the back of an R.B.I. cartridge roster: fixed numbers that follow from the ratings (same every game)
+function jerseyNo(name){ return 1+strHash(name+'#')%49; }
 function cardStats(b){ const r=rng(strHash(b[0]+'card')); return {avg:'.'+String(Math.round(205+b[3]*110+r()*25)).padStart(3,'0'),hr:Math.round(b[2]*b[2]*38+r()*6)}; }
 function pitchERA(p){ const r=rng(strHash(p.name+'era')); return (6.1-p.ctrl*2.4-p.velo*2.2+r()*.5).toFixed(2); }
 // a little overhead window on 1st or 3rd base: the baseman, the bag and the runner taking his lead (or running on a steal)

@@ -1292,7 +1292,7 @@ function simTraj(v,la,sp){
   const pts=[]; let fc=-1,hr=false,gr=false,wall=-1,after=0;
   for(let i=0;i<1100;i++){
     pts.push({x,y,z});
-    if(hr&&++after>45) break;
+    if(hr&&++after>10) break;   // a few rows deep, then it's in the crowd
     const s=hyp(vx,vy,vz),k=KD*s;
     vx-=k*vx*DT; vy-=k*vy*DT; vz-=(32+k*vz)*DT; x+=vx*DT; y+=vy*DT; z+=vz*DT;
     if(hr) continue;
@@ -1488,6 +1488,7 @@ function updateField(dt){
     const j=Math.min(Math.floor(F.t/DT),F.tr.pts.length-1),p=F.tr.pts[j];
     b.x=p.x; b.y=p.y; b.z=p.z;
     if(F.tr.fc>=0&&j>=F.tr.fc&&!F.dust){ F.dust=1; puff(p.x,p.y,8); SFX.bounce(); }
+    if(F.hr&&j>=F.tr.pts.length-1&&!F.gone){ F.gone=1; puff(p.x,p.y,12,'#ffffff'); }
     if(F.tr.wall>=0&&j>=F.tr.wall&&!F.wallHit){ F.wallHit=1; puff(p.x,p.y,10,'#ffffff'); F.pops.push({x:p.x,y:p.y,t:-.15,s:'OFF THE WALL'}); SFX.pop(); }
     if(man&&F.air&&!F.caught&&F.tr.fc>=0&&j>=F.tr.fc){ F.air=false; for(const r of live()) if(!r.isB&&r.pos===r.target) decideAdvance(r); }   // dropped it: runners go
     if(man&&F.manualOn&&F.catcher>=0){ const c=F.fl[F.catcher],air=F.tr.fc<0||j<F.tr.fc;
@@ -1502,8 +1503,15 @@ function updateField(dt){
     b.x=b.from.x+(b.to.x-b.from.x)*u; b.y=b.from.y+(b.to.y-b.from.y)*u; b.z=4.4+Math.sin(Math.PI*u)*Math.min(28,b.d*.07);
     if(u>=1){ const rv=F.fl[b.recv];
       if(hyp(rv.x-b.to.x,rv.y-b.to.y)<10){ rv.x=b.to.x; rv.y=b.to.y; rv.tx=rv.x; rv.ty=rv.y; F.ball={st:'held',f:b.recv,x:rv.x,y:rv.y,z:4}; F.cool=.12; SFX.pop(); }
-      else { F.ball={st:'loose',recv:b.recv,x:b.to.x,y:b.to.y,z:0}; rv.tx=b.to.x; rv.ty=b.to.y; } }
+      else { const d=Math.max(1,hyp(b.to.x-b.from.x,b.to.y-b.from.y)),v=.45*b.d/b.dur;
+        F.ball={st:'loose',recv:b.recv,x:b.to.x,y:b.to.y,z:0,vx:(b.to.x-b.from.x)/d*v,vy:(b.to.y-b.from.y)/d*v}; SFX.bounce(); } }
   } else if(b.st==='loose'){
+    if(b.vx||b.vy){   // rolling: slow down, stop at the wall
+      b.x+=b.vx*dt; b.y+=b.vy*dt; const sp=hyp(b.vx,b.vy),k=Math.max(0,sp-45*dt)/sp; b.vx*=k; b.vy*=k;
+      if(sp<2||region(b.x,b.y)>-2){ b.vx=b.vy=0; } }
+    if(!(man&&F.manualOn)){   // whoever gets there first goes after it
+      let best=b.recv,bt=1e9; F.fl.forEach((f,i)=>{ const t=hyp(f.x-b.x,f.y-b.y)/f.spd; if(t<bt){ bt=t; best=i; } });
+      if(best!==b.recv){ const o=F.fl[b.recv]; o.tx=o.x; o.ty=o.y; b.recv=best; } }
     const rv=F.fl[b.recv]; if(!(man&&F.manualOn)){ rv.tx=b.x; rv.ty=b.y; }
     if(hyp(rv.x-b.x,rv.y-b.y)<4){ F.ball={st:'held',f:b.recv,x:b.x,y:b.y,z:4}; F.cool=.12; }
   }

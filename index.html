@@ -987,7 +987,7 @@ function discPx(cx,cy,r,fn){ if(r<.6){ fn(Math.round(cx),Math.round(cy)); return
   for(let y=Math.floor(cy-r);y<=Math.ceil(cy+r);y++) for(let x=Math.floor(cx-r);x<=Math.ceil(cx+r);x++) if((x-cx)*(x-cx)+(y-cy)*(y-cy)<=r*r+.15) fn(x,y); }
 function inPoly(x,y,P){ let c=false; for(let i=0,j=P.length-1;i<P.length;j=i++){ const [xi,yi]=P[i],[xj,yj]=P[j]; if(((yi>y)!==(yj>y))&&(x<(xj-xi)*(y-yi)/(yj-yi)+xi)) c=!c; } return c; }
 const shadeMemo=new Map(),shadeC=(c,f)=>{ const key=c+f; let v=shadeMemo.get(key); if(!v){ v=shade(c,f); shadeMemo.set(key,v); } return v; };
-function pixelSprite(w,h,parts,flip,lit){
+function pixelSprite(w,h,parts,flip,lit,flat){
   const id=new Int16Array(w*h).fill(-1),col=new Array(w*h);
   const put=(x,y,c,i,maxY)=>{ x=Math.round(x); y=Math.round(y); if(x<0||y<0||x>=w||y>=h||(maxY!==undefined&&y>maxY)) return; id[y*w+x]=i; col[y*w+x]=c; };
   parts.forEach((p,i)=>{
@@ -1008,10 +1008,10 @@ function pixelSprite(w,h,parts,flip,lit){
     const hi=edge(x-1,y)||edge(x,y-1),lo=edge(x+1,y)||edge(x,y+1);
     if(lo&&!hi) out[y*w+x]=shadeC(c,.78); else if(hi&&!lo) out[y*w+x]=shadeC(c,1.18); }
   // parts flagged "sep" get a dark line where they cross over earlier parts (arm over chest, etc.)
-  for(let y=0;y<h;y++) for(let x=0;x<w;x++){ const i=id[y*w+x]; if(i<0||!parts[i].sep) continue;
+  if(!flat) for(let y=0;y<h;y++) for(let x=0;x<w;x++){ const i=id[y*w+x]; if(i<0||!parts[i].sep) continue;
     for(const [dx,dy] of N){ const nx=x+dx,ny=y+dy; if(nx<0||ny<0||nx>=w||ny>=h) continue; const j=id[ny*w+nx]; if(j>=0&&j<i&&!parts[j].noSep) out[ny*w+nx]=ART_INK; } }
   // hard silhouette outline
-  for(let y=0;y<h;y++) for(let x=0;x<w;x++){ if(id[y*w+x]>=0) continue;
+  if(!flat) for(let y=0;y<h;y++) for(let x=0;x<w;x++){ if(id[y*w+x]>=0) continue;
     for(const [dx,dy] of N){ const nx=x+dx,ny=y+dy; if(nx>=0&&ny>=0&&nx<w&&ny<h&&id[ny*w+nx]>=0){ out[y*w+x]=ART_INK; break; } } }
   const c=document.createElement('canvas'); c.width=w; c.height=h; const g=c.getContext('2d');
   for(let y=0;y<h;y++) for(let x=0;x<w;x++){ const v=out[y*w+x]; if(!v) continue; g.fillStyle=v; g.fillRect(flip?w-1-x:x,y,1,1); }
@@ -1123,8 +1123,8 @@ function pitcherParts(J,k,ball,u=1){
 }
 const spr8Cache=new Map();
 function batterSprite(t,skin,frame,flip,num=0){
-  const key='R'+t.abbr+t.jersey+t.cap+t.pants+skin+frame+(flip?1:0)+'#'+num; let c=spr8Cache.get(key);
-  if(!c){ c=pixelSprite(40*SPR_U,40*SPR_U,rearBatterParts(BATR[frame],kit8(t,skin),SPR_U,num,flip),flip,SPR_U>1); spr8Cache.set(key,c); }
+  const key='RBI'+t.abbr+t.jersey+t.cap+t.pants+skin+frame+(flip?1:0); let c=spr8Cache.get(key);
+  if(!c){ c=pixelSprite(Math.ceil(43*RBI_S),Math.ceil(40*RBI_S),rbiBatterParts(BATR[frame],kit8(t,skin)),flip,false,true); spr8Cache.set(key,c); }
   return c;
 }
 // R.B.I.'s pitcher is stocky: legs shortened below the hips, the upper body widened and lowered so his feet stay on the rubber
@@ -1153,19 +1153,25 @@ function catcherParts(k,glove){
   ];
   return P;
 }
+function rbiCatcherParts(k){
+  return [{k:'disc',x:16,y:21,r:9,c:k.jer},{k:'rect',x:3,y:19,w:26,h:6,c:k.jer},
+    {k:'disc',x:16,y:9,r:8.2,c:k.cap},{k:'rect',x:15,y:1,w:2,h:16,c:'#f0a050'},{k:'rect',x:8,y:9,w:16,h:2,c:'#f0a050'},
+    {k:'rect',x:6,y:13,w:20,h:2,c:k.capD},{k:'rect',x:12,y:16,w:8,h:2,c:k.skinD}];
+}
 function drawCatcher(t,skin){
-  const key='C'+t.abbr+t.jersey+t.cap+t.pants+skin; let c=spr8Cache.get(key);
-  if(!c){ c=pixelSprite(32,28,catcherParts(kit8(t,skin)),false,true); spr8Cache.set(key,c); }
+  const key='CR'+t.abbr+t.jersey+t.cap+t.pants+skin; let c=spr8Cache.get(key);
+  if(!c){ c=pixelSprite(32,26,rbiCatcherParts(kit8(t,skin)),false,false,true); spr8Cache.set(key,c); }
+  ctx.drawImage(c,128-16,216-22,32,26); return;
   ctx.drawImage(c,snap(128-16*1.15),snap(222-28*1.15),32*1.15,28*1.15);   // feet tuck behind the batter card
 }
 // R.B.I.-style batter, seen from behind: grid 40x40 (NES units), feet centred at x 16 on y 38, right-handed (faces the plate to the right).
 // The contact frame holds the bat at grid y 16.3, which lands on the pitch's height (2.6 ft) at BATR_PX game px per unit.
 const BATR_PX=2.4,BATR={
-  stance:{head:[16,6.5],torso:[[10.5,11],[21.5,11],[20.5,22],[11.5,22]],sN:[11,12],eN:[8,14.5],sF:[21,12],eF:[15,15],grip:[10,9.5],hB:[11,8.3],tip:[5.5,0],butt:[9.4,10.4],
+  stance:{head:[16,6.5],torso:[[10.5,11],[21.5,11],[20.5,22],[11.5,22]],sN:[11,12],eN:[9.5,15.5],sF:[21,12],eF:[19,15.5],grip:[13.5,14.5],hB:[13.5,12.8],tip:[12.8,-2],butt:[13.6,16],behind:1,
     hipN:[13,22],kN:[10,29.5],aN:[9,37],hipF:[19,22],kF:[22,29.5],aF:[23,37]},
-  load:{head:[15.5,6.8],torso:[[10,11.3],[21,11.3],[20.5,22],[11.5,22]],sN:[10.5,12.3],eN:[7,14],sF:[20.5,12.3],eF:[14,15],grip:[8.5,10.5],hB:[9.6,9.3],tip:[2.5,2.5],butt:[7.8,11.3],
+  load:{head:[15.5,6.8],torso:[[10,11.3],[21,11.3],[20.5,22],[11.5,22]],sN:[10.5,12.3],eN:[8.5,15],sF:[20.5,12.3],eF:[17,15.5],grip:[12,14],hB:[11.8,12.3],tip:[8.5,-1.5],butt:[12.2,15.5],behind:1,
     hipN:[13,22],kN:[10,29.5],aN:[9,37],hipF:[19,22],kF:[21.5,28],aF:[22.5,35.5]},
-  contact:{head:[18,7],torso:[[12,11.5],[23,11.5],[21.5,22],[12.5,22]],sN:[13,12.5],eN:[18,16],sF:[22,12.5],eF:[24.5,15],grip:[23.5,16.3],hB:[25.2,16.3],tip:[38,16.3],butt:[22.3,16.3],
+  contact:{head:[18,7],torso:[[12,11.5],[23,11.5],[21.5,22],[12.5,22]],sN:[13,12.5],eN:[18,16],sF:[22,12.5],eF:[24.5,15],grip:[23.5,16.3],hB:[25.2,16.3],tip:[41,16.3],butt:[22.3,16.3],
     hipN:[13.5,22],kN:[11,30],aN:[9.5,37],hipF:[20,22],kF:[24,29],aF:[25,37]},
   extend:{head:[18,7],torso:[[12,11.5],[23,11.5],[21.5,22],[12.5,22]],sN:[13,12.5],eN:[19,14],sF:[22,12.5],eF:[25,12.5],grip:[24,12],hB:[25,11],tip:[32,4],butt:[23.2,13],
     hipN:[13.5,22],kN:[11.5,30],aN:[10,37],hipF:[20,22],kF:[24,29],aF:[25,37]},
@@ -1174,6 +1180,24 @@ const BATR_PX=2.4,BATR={
   bunt:{head:[16.5,6.5],torso:[[11,11],[22,11],[21,22],[12,22]],sN:[11.5,12],eN:[11,15],sF:[21.5,12],eF:[20,15],grip:[13.5,15.8],hB:[20.5,15.8],tip:[30,15.8],butt:[11.5,15.8],
     hipN:[13,22],kN:[11,29.5],aN:[10,37],hipF:[19.5,22],kF:[22,29.5],aF:[23,37]},
 };
+const RBI_S=2.2,RBI_DARK='#1c1820',RBI_BAT='#2b2125';
+function rbiBatterParts(J,k){
+  const s=RBI_S,f=s/1.6*1.12,q=p=>[p[0]*s,p[1]*s],P=[],L=(a,b,r0,r1,c)=>({k:'line',p:[q(a),q(b)],r0:r0*f,r1:r1*f,c});
+  const tc=(J.torso[0][0]+J.torso[1][0])/2,TO=J.torso.map(([x,y])=>[tc+(x-tc)*1.15,y]);   // a broad R.B.I. back
+  const bat=()=>P.push(L(J.butt,J.tip,1.1,2,RBI_BAT));
+  if(J.behind) bat();
+  P.push(L(J.sF,J.eF,2.3,2,RBI_DARK),L(J.eF,J.hB,2,1.8,RBI_DARK));                           // far arm
+  for(const [hip,kn,an] of [[J.hipN,J.kN,J.aN],[J.hipF,J.kF,J.aF]]){ const sk=lerp2(kn,an,.62);
+    P.push(L(hip,kn,3.3,2.8,k.pan),L(kn,sk,2.8,2.5,k.pan),L(sk,an,2.3,2.1,k.cap),L(an,[an[0]+2.4,an[1]+.5],2.2,2,RBI_DARK)); }
+  P.push({k:'poly',p:TO.map(q),c:k.jer});
+  const t=TO; P.push({k:'rect',x:Math.round(t[3][0]*s),y:Math.round(t[3][1]*s)-2,w:Math.round((t[2][0]-t[3][0])*s)+1,h:2,c:RBI_DARK});
+  const hd=q(J.head); P.push({k:'line',p:[[hd[0],hd[1]+4*f],[hd[0],t[0][1]*s+1]],r0:2.4*f,r1:2.6*f,c:k.skin});
+  P.push({k:'disc',x:hd[0],y:hd[1],r:6.2*f,c:k.cap},{k:'disc',x:hd[0]+4.2*f,y:hd[1]+1.8*f,r:3.2*f,c:k.skin},{k:'rect',x:Math.round(hd[0]+1.5*f),y:Math.round(hd[1]-1.2*f),w:Math.round(6*f),h:Math.round(2*f),c:k.cap});
+  if(!J.behind) bat();
+  P.push(L(J.sN,J.eN,2.4,2.1,RBI_DARK),L(J.eN,J.grip,2.1,1.9,RBI_DARK));                       // near arm
+  P.push({k:'disc',x:J.grip[0]*s,y:J.grip[1]*s,r:2.1*f,c:k.skin},{k:'disc',x:J.hB[0]*s,y:J.hB[1]*s,r:2.1*f,c:k.skin});
+  return P;
+}
 // 3x5 digits for the number on the back
 const DIG=['111101101101111','010110010010111','111001111100111','111001111001111','101101111001001','111100111001111','111100111101111','111001010010010','111101111101111','111101111001111'];
 function rearBatterParts(J,k,u,num,flip){
@@ -1207,10 +1231,11 @@ const SPR_U=2;
 function batFrame(phase,bunt){ return bunt?'bunt':phase<=0?'stance':phase<.22?'load':phase<.5?'contact':phase<.72?'extend':'follow'; }
 let batHead=[0,0];
 function drawBatter(t,skin,hb,off,phase,bunt,num){
-  const [sx,sy]=pp(-hb*2.2+off,.3),c=batterSprite(t,skin,batFrame(phase,bunt),hb<0,num);
-  const ax=hb<0?40-16:16,J=BATR[batFrame(phase,bunt)];   // feet centre in the sprite
-  ctx.imageSmoothingEnabled=false; ctx.drawImage(c,snap(sx-ax*BATR_PX),snap(sy-38*BATR_PX),40*BATR_PX,40*BATR_PX);
-  batHead=[sx+(hb<0?-1:1)*(J.head[0]-16)*BATR_PX,sy-(38-J.head[1])*BATR_PX];
+  // 1 sprite pixel = 1 game pixel, like the NES. His feet sit where the contact frame's bat (grid y 16.3) lands on the pitch's height.
+  const c=batterSprite(t,skin,batFrame(phase,bunt),hb<0,num),S=RBI_S,sx=128-hb*40+off*19.8,sy=pp(0,0,2.6)[1]+(38-16.3)*S;
+  const ax=(hb<0?43-16:16)*S,J=BATR[batFrame(phase,bunt)];
+  ctx.imageSmoothingEnabled=false; ctx.drawImage(c,snap(sx-ax),snap(sy-38*S),c.width,c.height);
+  batHead=[sx+(hb<0?-1:1)*(J.head[0]-16)*S,sy-(38-J.head[1])*S];
 }
 function drawPitcher(sx,sy,s,t,skin,frame,ball){
   const c=pitcherSprite(t,skin,frame,ball);

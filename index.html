@@ -313,7 +313,7 @@ function pollPad(){
   const pads=[...(navigator.getGamepads?navigator.getGamepads():[])].filter(p=>p&&p.connected).slice(0,1);
   pads.forEach((gp,pl)=>{
     const bt=i=>!!(gp.buttons[i]&&gp.buttons[i].pressed),ax=gp.axes||[],H=padHeld[pl];
-    const st={a:bt(0)||bt(3),b:bt(1)||bt(2),start:bt(9),select:bt(8),
+    const st={a:bt(0)||bt(3)||bt(7),b:bt(1)||bt(2)||bt(6),start:bt(9),select:bt(8),
       up:bt(12)||ax[1]<-.55,down:bt(13)||ax[1]>.55,left:bt(14)||ax[0]<-.55,right:bt(15)||ax[0]>.55};
     for(const k in st) if(st[k]!==!!H[k]){ H[k]=st[k]; setKey(k,st[k],pl); if(st[k]) kbMode=false; }
   });
@@ -379,6 +379,8 @@ function waves(){
   const lfsr=short=>{ const len=short?93*40:32767,buf=AC.createBuffer(1,len,AC.sampleRate),ch=buf.getChannelData(0); let r=1;
     for(let i=0;i<len;i++){ const fb=(r&1)^((r>>(short?6:1))&1); r=(r>>1)|(fb<<14); ch[i]=(r&1)?.75:-.75; } return buf; };
   WAVES.nL=lfsr(false); WAVES.nS=lfsr(true);
+  // ballpark organ: drawbar-style harmonics (8', 4', 2 2/3', 2', 1 3/5', 1')
+  { const re=new Float32Array(17),im=new Float32Array(17); [[1,1],[2,.75],[3,.55],[4,.45],[5,.18],[6,.3],[8,.25],[16,.08]].forEach(([k,a])=>{ im[k]=a; }); WAVES.org=AC.createPeriodicWave(re,im); }
   return WAVES;
 }
 // volume in 16 hardware steps, updated once per video frame
@@ -393,9 +395,11 @@ let musicNodes=[],musicName=null,musicLoop=false,musicEnd=0;
 function voice(ch,f,t,dur,{vol=.2,mode='decay',sweep=null,music=false}={}){
   if(!AC||muted) return;
   const o=AC.createOscillator(),g=AC.createGain(); o.setPeriodicWave(waves()[ch]);
-  if(sweep){ const n=Math.max(1,Math.round(dur/FR)); for(let i=0;i<=n;i++) o.frequency.setValueAtTime(ch==='tri'?sweep(i/n):nesF(sweep(i/n)),t+i*FR); }
-  else o.frequency.setValueAtTime(ch==='tri'?f:nesF(f),t);
-  env(g,t,dur,vol,ch==='tri'?'hold':mode); o.connect(g).connect(master); o.start(t); o.stop(t+dur+.06);
+  const raw=ch==='tri'||ch==='org';
+  if(sweep){ const n=Math.max(1,Math.round(dur/FR)); for(let i=0;i<=n;i++) o.frequency.setValueAtTime(raw?sweep(i/n):nesF(sweep(i/n)),t+i*FR); }
+  else o.frequency.setValueAtTime(raw?f:nesF(f),t);
+  if(ch==='org'){ const lfo=AC.createOscillator(),lg=AC.createGain(); lfo.frequency.value=6.2; lg.gain.value=f*.006; lfo.connect(lg).connect(o.frequency); lfo.start(t); lfo.stop(t+dur+.06); }
+  env(g,t,dur,vol,ch==='tri'||ch==='org'?'hold':mode); o.connect(g).connect(master); o.start(t); o.stop(t+dur+.06);
   if(music) musicNodes.push({n:o,end:t+dur});
 }
 function nz(t,dur,{per=6,to=null,vol=.2,short=false,mode='decay',music=false}={}){
@@ -409,6 +413,18 @@ function nz(t,dur,{per=6,to=null,vol=.2,short=false,mode='decay',music=false}={}
 }
 const now=(d=0)=>AC?AC.currentTime+d:0;
 
+/* ---------- crowd murmur under the whole game; it swells a little on its own ---------- */
+let amb=null;
+function ambTick(on){
+  if(!AC||AC.state!=='running') return;
+  if(!amb){ const len=AC.sampleRate*2,b=AC.createBuffer(1,len,AC.sampleRate),d=b.getChannelData(0); let p=0;
+    for(let i=0;i<len;i++){ p=p*.97+(Math.random()*2-1)*.03; d[i]=p*6; }
+    const s=AC.createBufferSource(),lp=AC.createBiquadFilter(),g=AC.createGain(),lfo=AC.createOscillator(),lg=AC.createGain();
+    s.buffer=b; s.loop=true; lp.type='bandpass'; lp.frequency.value=520; lp.Q.value=.6; g.gain.value=0;
+    lfo.frequency.value=.13; lg.gain.value=.012; lfo.connect(lg).connect(g.gain);
+    s.connect(lp).connect(g).connect(master); s.start(); lfo.start(); amb={g,on:false}; }
+  on=on&&!muted; if(on!==amb.on){ amb.on=on; amb.g.gain.setTargetAtTime(on?.05:0,AC.currentTime,on?.8:.25); }
+}
 /* ---------- songs: [note, beats] per channel ---------- */
 function waltzAccomp(chords){   // oom-pah-pah: triangle root on 1, pulse chord tones on 2 and 3
   const C={C:['C3','E4','G4'],G:['G2','B3','D4'],G7:['G2','B3','F4'],A7:['A2','C#4','G4'],Dm:['D3','F4','A4'],D7:['D3','F#4','C5'],F:['F2','A3','C4']};
@@ -427,8 +443,8 @@ const TM_ACC=waltzAccomp(['C','C','G','G','C','C','G','G','A7','Dm','Dm','Dm','D
 const SONGS={
   title:{bpm:176,tracks:[{ch:'p0.5',vol:.16,mode:'pluck',notes:TMOTBG},{ch:'p0.25',vol:.07,mode:'pluck',notes:TM_ACC.mid},{ch:'tri',vol:.28,notes:TM_ACC.bass}]},
   charge:{bpm:150,tracks:[
-    {ch:'p0.5',vol:.18,mode:'hold',notes:[['G4',1/3],['C5',1/3],['E5',1/3],['G5',1],['E5',1/2],['G5',2.5]]},
-    {ch:'p0.25',vol:.1,mode:'hold',notes:[['E4',1/3],['G4',1/3],['C5',1/3],['E5',1],['C5',1/2],['E5',2.5]]},
+    {ch:'org',vol:.13,notes:[['G4',1/3],['C5',1/3],['E5',1/3],['G5',1],['E5',1/2],['G5',2.5]]},
+    {ch:'org',vol:.08,notes:[['E4',1/3],['G4',1/3],['C5',1/3],['E5',1],['C5',1/2],['E5',2.5]]},
     {ch:'tri',vol:.3,notes:[['C3',1],['G2',1],['C3',3]]}]},
   inning:{bpm:220,tracks:[
     {ch:'p0.5',vol:.16,mode:'pluck',notes:[['C5',.5],['E5',.5],['G5',.5],['C6',.5],['R',.5],['A5',.5],['B5',.5],['C6',2]]},
@@ -442,20 +458,42 @@ const SONGS={
     {ch:'p0.5',vol:.17,mode:'pluck',notes:[['C5',.5],['C5',.5],['C5',.5],['E5',1],['G5',.5],['E5',.5],['G5',.5],['C6',2.5]]},
     {ch:'p0.25',vol:.08,mode:'pluck',notes:[['G4',.5],['G4',.5],['G4',.5],['C5',1],['E5',.5],['C5',.5],['E5',.5],['G5',2.5]]},
     {ch:'tri',vol:.3,notes:[['C3',1.5],['G2',1],['C3',1.5],['C3',2.5]]}]},
+  // organ lead-in for the "LET'S GO" chant (the claps and shouts are noise, see SFX.chant)
+  letsgo:{bpm:132,tracks:[
+    {ch:'org',vol:.12,notes:[['C5',.5],['D5',.5],['E5',.5],['G5',.5],['A5',.5],['G5',.5],['E5',1]]},
+    {ch:'org',vol:.07,notes:[['E4',1],['G4',1],['C5',2]]},
+    {ch:'tri',vol:.26,notes:[['C3',1],['G2',1],['C3',2]]}]},
+  // two-strike / "DE-FENSE" stomp: low organ pulses
+  defense:{bpm:120,tracks:[
+    {ch:'org',vol:.12,notes:[['C4',.5],['R',.5],['C#4',.5],['R',.5],['D4',.5],['R',.5],['D#4',.5],['R',.5],['E4',1.5]]},
+    {ch:'tri',vol:.28,notes:[['C2',.5],['R',.5],['C#2',.5],['R',.5],['D2',.5],['R',.5],['D#2',.5],['R',.5],['E2',1.5]]}]},
+  // seventh-inning stretch: Take Me Out to the Ball Game on the organ
+  stretch:{bpm:168,tracks:[{ch:'org',vol:.13,notes:TMOTBG},{ch:'org',vol:.06,notes:TM_ACC.mid},{ch:'tri',vol:.26,notes:TM_ACC.bass}]},
   lose:{bpm:92,tracks:[
     {ch:'p0.5',vol:.16,mode:'decay',notes:[['G4',1],['F#4',1],['F4',1],['E4',3]]},
     {ch:'tri',vol:.28,notes:[['C3',1],['B2',1],['Bb2',1],['A2',3]]}]},
 };
+// each player's walk-up music: a 2-bar organ riff picked from his name, so he gets the same song every time
+function walkupSong(name){
+  const r=rng(strHash(name+'walkup')),key=['C','D','F','G','A','Bb'][r()*6|0],oct=4,scale=[0,2,4,7,9,12,14,16];
+  const root=NOTE(key+oct),nt=i=>{ const semi=scale[i]; return 440*Math.pow(2,(Math.log2(root/440)*12+semi)/12); };
+  const lead=[],bass=[],rh=[[.5,.5,1,.5,.5,1],[1,.5,.5,1,1],[.5,.5,.5,.5,1,1],[.75,.25,.5,.5,1,1]][r()*4|0];
+  let i=r()*4|0; for(const b of rh.concat(rh)){ i=clamp(i+[-2,-1,1,2,3][r()*5|0],0,7); lead.push([nt(i),b]); }
+  const bb=Math.log2(root/440)*12+69-24; [0,7,5,7].forEach(st=>bass.push([440*Math.pow(2,(bb+st-69)/12),2]));
+  return {bpm:150+(r()*30|0),tracks:[{ch:'org',vol:.12,notes:lead},{ch:'tri',vol:.24,notes:bass}]};
+}
 function schedSong(song,t0){
   const spb=60/song.bpm; let len=0;
   for(const tr of song.tracks){ let t=t0;
-    for(const [n,b] of tr.notes){ if(n!=='R') voice(tr.ch,NOTE(n),t,b*spb*(tr.ch==='tri'?.95:.9),{vol:tr.vol,mode:tr.mode,music:true}); t+=b*spb; }
+    for(const [n,b] of tr.notes){ if(n!=='R') voice(tr.ch,typeof n==='number'?n:NOTE(n),t,b*spb*(tr.ch==='tri'?.95:.9),{vol:tr.vol,mode:tr.mode,music:true}); t+=b*spb; }
     len=Math.max(len,t-t0); }
   return len;
 }
 function stopMusic(){ for(const m of musicNodes){ try{ m.n.stop(); }catch(_){} } musicNodes=[]; musicName=null; }
 function playSong(name,loop=false){
   stopMusic(); if(!AC||muted||AC.state!=='running') return;
+  if(!SONGS[name]&&name.startsWith('wu:')) SONGS[name]=walkupSong(name.slice(3));
+  if(!SONGS[name]) return;
   const t0=now(.06); musicEnd=t0+schedSong(SONGS[name],t0); musicName=name; musicLoop=loop;
 }
 function musicTick(){
@@ -465,16 +503,24 @@ function musicTick(){
   else if(!musicLoop&&t>musicEnd) musicName=null;
 }
 
+/* ---------- rumble: phone vibration (Android) and controller rumble; off when the sound is off ---------- */
+const RUMBLE={hit:[35,.6,1,110],hr:[[70,50,120],1,1,600],catch:[15,.25,.5,60],out:[22,.35,.35,70]};
+function rumble(kind){
+  if(muted) return; const [ms,weak,strong,dur]=RUMBLE[kind];
+  try{ if(navigator.vibrate) navigator.vibrate(ms); }catch(_){}
+  try{ for(const gp of (navigator.getGamepads?navigator.getGamepads():[])){ const va=gp&&gp.vibrationActuator;
+    if(va&&va.playEffect) va.playEffect('dual-rumble',{duration:dur,weakMagnitude:weak,strongMagnitude:strong}).catch(()=>{}); } }catch(_){}
+}
 /* ---------- sound effects ---------- */
 const SFX={
   blip(){ voice('p0.125',1760,now(),.05,{vol:.14}); },
   pitch(){ nz(now(),.28,{per:4,to:9,vol:.13,mode:'swell'}); },
-  crack(){ const t=now(); nz(t,.13,{per:1,to:5,vol:.42}); voice('p0.25',1300,t,.09,{vol:.12,sweep:u=>1300-1000*u}); },
-  pop(){ const t=now(); nz(t,.07,{per:9,vol:.3}); voice('tri',0,t,.07,{vol:.3,sweep:u=>130-60*u}); },
+  crack(){ rumble('hit'); const t=now(); nz(t,.13,{per:1,to:5,vol:.42}); voice('p0.25',1300,t,.09,{vol:.12,sweep:u=>1300-1000*u}); },
+  pop(){ rumble('catch'); const t=now(); nz(t,.07,{per:9,vol:.3}); voice('tri',0,t,.07,{vol:.3,sweep:u=>130-60*u}); },
   bounce(){ voice('tri',0,now(),.06,{vol:.22,sweep:u=>240-120*u}); },
   strike(){ const t=now(); voice('p0.5',NOTE('E5'),t,.08,{vol:.15,mode:'hold'}); voice('p0.5',NOTE('C5'),t+.09,.16,{vol:.15}); },
   ball(){ voice('p0.25',NOTE('G4'),now(),.14,{vol:.14}); },
-  out(){ const t=now(); [['C5',0],['G4',.07],['C4',.14]].forEach(([n,d])=>voice('p0.5',NOTE(n),t+d,.08,{vol:.14,mode:'hold'})); },
+  out(){ rumble('out'); const t=now(); [['C5',0],['G4',.07],['C4',.14]].forEach(([n,d])=>voice('p0.5',NOTE(n),t+d,.08,{vol:.14,mode:'hold'})); },
   score(){ const t=now(); ['C6','E6','G6','C7'].forEach((n,i)=>voice('p0.25',NOTE(n),t+i*.05,.06,{vol:.11})); },
   hit(){ const t=now(); voice('p0.5',NOTE('G5'),t,.06,{vol:.13,mode:'hold'}); voice('p0.5',NOTE('C6'),t+.07,.12,{vol:.13}); },
   thr(){ nz(now(),.12,{per:3,to:7,vol:.09,mode:'swell'}); },
@@ -482,8 +528,15 @@ const SFX={
   cheer(){ const t=now(); nz(t,1.5,{per:3,vol:.13,mode:'swell'}); nz(t+.1,1.2,{per:5,vol:.08,mode:'swell'}); for(let i=0;i<5;i++) nz(t+.15+i*.17+Math.random()*.05,.05,{per:1,vol:.05,short:true}); },
   crowd(){ const t=now(); nz(t,2,{per:3,vol:.12,mode:'swell'}); nz(t+.2,1.6,{per:5,vol:.08,mode:'swell'}); },
   crackle(){ const t=now(); for(let i=0;i<6;i++) nz(t+i*.07+Math.random()*.04,.05,{per:2+Math.random()*3|0,vol:.12,short:Math.random()<.5}); },
-  hr(){ playSong('hr'); SFX.crowd(); },
+  hr(){ rumble('hr'); playSong('hr'); SFX.crowd(); },
   charge(){ playSong('charge'); setTimeout(()=>SFX.crowd(),1300); },
+  // crowd chant: organ lead-in, then three rounds of a shouted "LET'S GO!" and clap-clap clap-clap-clap
+  chant(){ playSong('letsgo'); const t=now(1.85);
+    for(let r=0;r<3;r++){ const b=t+r*1.6;
+      [0,.22,.44].forEach((d,i)=>nz(b+d,.17,{per:i===2?6:5,vol:.11,mode:'swell'}));
+      [.8,1.0,1.2,1.3,1.4].forEach(d=>{ nz(b+d,.04,{per:1,vol:.13,short:true}); nz(b+d+.01,.05,{per:3,vol:.07}); }); } },
+  defense(){ playSong('defense'); const t=now(.06); for(let i=0;i<4;i++) nz(t+i*.5,.06,{per:2,vol:.12,short:true}); },
+  stretch(){ playSong('stretch'); },
   inning(){ playSong('inning'); },
   end(){ playSong('win'); }, lose(){ playSong('lose'); },
 };
@@ -1144,7 +1197,15 @@ function cpuPinch(){
 }
 function banner(text,sub,then,t=1.6,col){ G.banner={text,sub,then,t,T:t,col}; }
 function addRuns(n){ G.score[G.half]+=n; G.line[G.half][G.inning-1]=(G.line[G.half][G.inning-1]||0)+n; }
-function startAtBat(){ G.balls=0; G.strikes=0; G.batOff=0; G.pen=false; G.benchUI=null; newPitch(); cpuBullpen(); if(!G.banner) cpuPinch(); if(G.pa++===G.streakAt) startStreak(); else if(!G.demo&&!G.derby&&G.half===1&&(G.bases[1]||G.bases[2])&&Math.random()<.3) SFX.charge(); }
+function startAtBat(){ G.balls=0; G.strikes=0; G.batOff=0; G.pen=false; G.benchUI=null; newPitch(); cpuBullpen(); if(!G.banner) cpuPinch(); if(G.pa++===G.streakAt) startStreak(); else if(!G.demo&&!G.derby) crowdMoment(); }
+// the home crowd: CHARGE or a LET'S GO chant with their runners in scoring position, DE-FENSE when the visitors threaten,
+// and otherwise the home batter's walk-up music
+function crowdMoment(){
+  const risp=G.bases[1]||G.bases[2],r=Math.random();
+  if(G.half===1&&risp&&r<.45) (r<.22?SFX.charge:SFX.chant)();
+  else if(G.half===0&&risp&&G.outs===2&&r<.4) SFX.defense();
+  else if(G.half===1&&!G.banner&&!musicName) playSong('wu:'+curBatter()[0]);
+}
 function stealRel(){ return P.state==='flight'?P.t:P.state==='windup'?P.t-.6:-.75; }
 function callSteal(){
   const who=[]; for(let b=3;b>=1;b--){ if(!G.bases[b-1]) continue; if(b===3||!G.bases[b]||who.includes(b+1)) who.push(b); }
@@ -1185,9 +1246,9 @@ function endHalf(){
   if(G.half===0){ if(G.inning>=G.innings&&G.score[1]>G.score[0]) return gameOver(); G.half=1; }
   else { if(G.inning>=G.innings&&G.score[0]!==G.score[1]) return gameOver(); G.half=0; G.inning++; }
   G.line[G.half][G.inning-1]=G.line[G.half][G.inning-1]||0;
-  const t=G.teams[G.half];
-  SFX.inning();
-  banner((G.half?'BOT ':'TOP ')+ord(G.inning),t.name+' UP',null,1.7);
+  const t=G.teams[G.half],stretch=G.half===1&&!G.demo&&G.inning===(G.innings>=9?7:G.innings>=6?5:2);
+  if(stretch){ SFX.stretch(); banner(ord(G.inning)+' INNING STRETCH','TAKE ME OUT TO THE BALL GAME',null,3.2,C.yellow); }
+  else { SFX.inning(); banner((G.half?'BOT ':'TOP ')+ord(G.inning),t.name+' UP',null,1.7); }
   startAtBat();
 }
 function gameOver(){ mode='over'; overT=0; G.banner=null; F=null; const w=G.score[0]>G.score[1]?0:1; if(!G.vs&&G.human>=0&&G.human!==w) SFX.lose(); else SFX.end(); if(G.season) seasonRecord(); }
@@ -2358,7 +2419,7 @@ function update(dt){
   routeInput();
   if(took('select')){ setMuted(!muted); if(!muted){ audioInit(); SFX.score(); } saveSettings(); }
   if(mode==='build'){ clearPressed(); return; }
-  if(NET.guest&&NET.live){ musicTick(); clearPressed(); return; }   // the host runs the game
+  if(NET.guest&&NET.live){ musicTick(); ambTick(mode==='play'&&!paused); clearPressed(); return; }   // the host runs the game
   if(mode==='lobby'){ updateLobby(); musicTick(); clearPressed(); return; }
   if(mode==='title') updateTitle(dt);
   else if(mode==='season'){ if(!SEA) toTitle(); else updateSeason(); }
@@ -2383,7 +2444,7 @@ function update(dt){
   if(G&&G.fb&&!paused) G.fb.t-=dt; if(padToast>0) padToast-=dt;
   updateFX(dt); if(shakeT>0) shakeT-=dt; if(flashT>0) flashT-=dt;
   if(mode==='play'&&G&&!paused&&((G.phase==='field'&&F)||(G.phase==='streak'&&ST))) camUpdate(dt);
-  musicTick(); if((mode==='title'||mode==='season')&&!musicName&&AC&&AC.state==='running'&&!muted) playSong('title',true);
+  musicTick(); ambTick(mode==='play'&&!paused&&G&&!G.demo); if((mode==='title'||mode==='season')&&!musicName&&AC&&AC.state==='running'&&!muted) playSong('title',true);
   clearPressed();
 }
 function draw(){

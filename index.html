@@ -1104,11 +1104,11 @@ function pitcherParts(J,k,ball,u=1){
     P.push({k:'px',pts:[[R(cx)-2,R(cy),k.pan],[R(cx)-1,R(cy),k.pan],[R(cx),R(cy),k.pan],[R(cx)+1,R(cy),k.pan]]}); }
   if(u>1){ // hi-res head: neck, ears, a rounder face, small eyes, nose, mouth; cap with a front brim and a logo
     const hx=J.head[0]*u,hy=J.head[1]*u+1,X=R(hx),Y=R(hy),ty=J.torso[0][1]*u;
-    P.push({k:'line',p:[[hx,hy+3],[hx,ty+.5]],r0:1.7,r1:2.1,c:k.skinD},
-      {k:'disc',x:hx-4.4,y:hy+.6,r:1.1,c:k.skinD},{k:'disc',x:hx+4.4,y:hy+.6,r:1.1,c:k.skinD},
-      {k:'disc',x:hx,y:hy,r:4.6,c:k.skin,sep:1},
-      {k:'disc',x:hx,y:hy-1.6,r:4.6,c:k.cap,maxY:Y-2},
-      {k:'rect',x:X-5,y:Y-2,w:11,h:2,c:k.capD},
+    P.push({k:'line',p:[[hx,hy+3],[hx,ty+.5]],r0:1.9,r1:2.3,c:k.skinD},
+      {k:'disc',x:hx-5.3,y:hy+.6,r:1.3,c:k.skinD},{k:'disc',x:hx+5.3,y:hy+.6,r:1.3,c:k.skinD},
+      {k:'disc',x:hx,y:hy,r:5.5,c:k.skin,sep:1},
+      {k:'disc',x:hx,y:hy-1.9,r:5.6,c:k.cap,maxY:Y-2},
+      {k:'rect',x:X-6,y:Y-2,w:13,h:2,c:k.capD},
       {k:'rect',x:X-1,y:Y-6,w:2,h:2,c:k.cap2,flat:1},
       {k:'rect',x:X-2,y:Y+1,w:1,h:1,c:ART_INK,flat:1},{k:'rect',x:X+2,y:Y+1,w:1,h:1,c:ART_INK,flat:1},
       {k:'rect',x:X,y:Y+2,w:1,h:1,c:k.skinD,flat:1},{k:'rect',x:X-1,y:Y+3,w:3,h:1,c:shade(k.skin,.62),flat:1}); }
@@ -1127,9 +1127,12 @@ function batterSprite(t,skin,frame,flip,num=0){
   if(!c){ c=pixelSprite(40*SPR_U,40*SPR_U,rearBatterParts(BATR[frame],kit8(t,skin),SPR_U,num,flip),flip,SPR_U>1); spr8Cache.set(key,c); }
   return c;
 }
+// R.B.I.'s pitcher is stocky: legs shortened below the hips, the upper body widened and lowered so his feet stay on the rubber
+function stockyPose(J){ const HY=18,f=([x,y],w=1)=>[13+(x-13)*w,y<=HY?y+2.8:HY+2.8+(y-HY)*.72],o={};
+  for(const k in J) o[k]=k==='torso'?J[k].map(p=>f(p,1.14)):k[0]==='s'?f(J[k],1.12):f(J[k]); return o; }
 function pitcherSprite(t,skin,frame,ball){
   const key='P'+t.abbr+t.jersey+t.cap+t.pants+skin+frame+(ball?1:0); let c=spr8Cache.get(key);
-  if(!c){ c=pixelSprite(26*SPR_U,30*SPR_U,pitcherParts(PIT8[frame],kit8(t,skin),ball,SPR_U),false,SPR_U>1); spr8Cache.set(key,c); }
+  if(!c){ c=pixelSprite(26*SPR_U,30*SPR_U,pitcherParts(stockyPose(PIT8[frame]),kit8(t,skin),ball,SPR_U),false,SPR_U>1); spr8Cache.set(key,c); }
   return c;
 }
 // catcher, seen from behind in his crouch below the plate (R.B.I. style); art in hi-res pixels (1.5 game px each)
@@ -1199,7 +1202,7 @@ function rearBatterParts(J,k,u,num,flip){
   arm8(P,J.sN,J.eN,J.grip,k,false,1,1.35,u);                             // near arm over the top
   return P;
 }
-const BAT_PX=3,PIT_PX=1.5;   // game pixels per NES-grid pixel; the sprites are drawn SPR_U times finer than that
+const BAT_PX=3,PIT_PX=1.3;   // game pixels per NES-grid pixel; the sprites are drawn SPR_U times finer than that
 const SPR_U=2;
 function batFrame(phase,bunt){ return bunt?'bunt':phase<=0?'stance':phase<.22?'load':phase<.5?'contact':phase<.72?'extend':'follow'; }
 let batHead=[0,0];

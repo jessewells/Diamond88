@@ -2107,10 +2107,10 @@ function menuRows(){
   const m=MENU.mode,AT=allTeams(),lk=seaLocked();
   const R={mode:['MODE',MODES[m]],lvl:['LEVEL',LVL[lk?SEA.lvl:MENU.lvl].name],you:['YOU',lk?(AT[seaIdx(SEA.teams[0])]||'?'):(AT[MENU.you]||'+ NEW TEAM')],
     cpu:[m===1?'PITCHER':m===2?'P2':'CPU',AT[MENU.cpu]],inn:['INNINGS',INN[lk?SEA.inn:MENU.inn]],bat:['YOU BAT',MENU.bat?'2ND (HOME)':'1ST (AWAY)'],
-    fld:['FIELDING',MENU.fld?'MANUAL':'AUTO'],park:['PARK',PARKS[MENU.park]],time:['TIME',MENU.time?'DAY':'NIGHT'],wind:['WIND',MENU.wind?'WINDY':'CALM'],net:['ONLINE',MENU.net?'JOIN A GAME':'HOST A GAME'],ntype:['PLAY',MENU.ntype?'HR DERBY':'GAME'],sea:['SEASON',SEA&&SEA.g<SEA.sched.length?(MENU.sea?'START NEW':'CONTINUE '+(SEA.g+1)+'/'+SEA.sched.length):'NEW']};
+    fld:['FIELDING',MENU.fld?'MANUAL':'AUTO'],park:['PARK',PARKS[MENU.park]],time:['TIME',MENU.time?'DAY':'NIGHT'],wind:['WIND',MENU.wind?'WINDY':'CALM'],net:['ONLINE',['HOST A GAME','JOIN A GAME','FIND A MATCH'][MENU.net]],ntype:['PLAY',MENU.ntype?'HR DERBY':'GAME'],sea:['SEASON',SEA&&SEA.g<SEA.sched.length?(MENU.sea?'START NEW':'CONTINUE '+(SEA.g+1)+'/'+SEA.sched.length):'NEW']};
   const V=['park','time','wind'];
   if(m===4) return [['mode',...R.mode],['ach','UNLOCKED',achCount()+' OF '+ACHS.length]];
-  const keys=m===0?['mode','lvl','you','cpu','inn','bat','fld',...V]:m===1?['mode','lvl','you','cpu',...V]:m===2?(MENU.net?['mode','net','you']:MENU.ntype?['mode','net','ntype','you',...V]:['mode','net','ntype','you','inn','bat','fld',...V]):['mode','sea','lvl','you','inn','fld',...V];
+  const keys=m===0?['mode','lvl','you','cpu','inn','bat','fld',...V]:m===1?['mode','lvl','you','cpu',...V]:m===2?(MENU.net===1?['mode','net','you']:MENU.ntype?['mode','net','ntype','you',...V]:['mode','net','ntype','you','inn','bat','fld',...V]):['mode','sea','lvl','you','inn','fld',...V];
   return keys.map(k=>[k,...R[k]]);
 }
 function updateTitle(dt){
@@ -2132,7 +2132,7 @@ function updateTitle(dt){
     if(key==='bat') MENU.bat=1-MENU.bat;
     if(key==='fld') MENU.fld=1-MENU.fld;
     if(key==='sea') MENU.sea=1-MENU.sea;
-    if(key==='net'){ MENU.net=1-MENU.net; MENU.row=Math.min(MENU.row,menuRows().length-1); }
+    if(key==='net'){ MENU.net=(MENU.net+ch+3)%3; MENU.row=Math.min(MENU.row,menuRows().length-1); }
     if(key==='ntype'){ MENU.ntype=1-MENU.ntype; }
     if(key==='park'||key==='time'){ if(key==='park') MENU.park=(MENU.park+ch+PARKS.length)%PARKS.length; else MENU.time=1-MENU.time;
       clearTimeout(MENU.vt); MENU.vt=setTimeout(()=>{ if(mode==='title') setVenue(MENU.park,MENU.time); },120); }
@@ -2145,7 +2145,7 @@ function updateTitle(dt){
   if(MENU.mode===4&&(took('start')||took('a'))){ SFX.blip(); saveSettings(); mode='ach'; ACHV.sel=0; return; }
   if(took('start')||took('a')){ SFX.score(); saveSettings();
     if(MENU.mode===3){ if(!locked) newSeason(); toSeason(); return; }
-    if(MENU.mode===2){ if(MENU.net){ netReset(); LOBBY.pos=0; mode='lobby'; } else hostRoom(); return; }
+    if(MENU.mode===2){ if(MENU.net===1){ netReset(); LOBBY.pos=0; mode='lobby'; } else if(MENU.net===2) findMatch(); else hostRoom(); return; }
     newGame(MENU.you,MENU.cpu,INN[MENU.inn],MENU.bat===1,false,{lv:MENU.lvl,derby:MENU.mode===1,vs:MENU.mode===2,manual:MENU.fld===1}); return; }
   if(titleIdle>14){ titleIdle=0; const a=(Math.random()*4)|0; let b=(a+1+((Math.random()*3)|0))%4; newGame(a,b,3,true,true); }
 }
@@ -2167,8 +2167,24 @@ function myTeamMsg(){ const t=allTeams()[MENU.you]; return t.custom?{code:teamCo
 function teamFromMsg(m){ if(m.builtin) return TEAMS.find(t=>t.id===m.builtin)||TEAMS[1];
   const v=m.code&&teamFromCode(m.code); if(!v) return TEAMS[1]; v.id='net'; return fromSaved(v); }
 function netReset(msg){
+  if(NET.match){ clearInterval(NET.match.keep); if(NET.host&&!NET.oppTeam&&NET.code) matchPost({op:'cancel',code:NET.code}).catch(()=>{}); }
   try{ NET.conn&&NET.conn.close(); }catch(_){} try{ NET.peer&&NET.peer.destroy(); }catch(_){}
-  Object.assign(NET,{host:false,guest:false,live:false,conn:null,peer:null,code:'',st:'',oppTeam:null,me:0,err:msg||'',err2:'',reg:false});
+  Object.assign(NET,{host:false,guest:false,live:false,conn:null,peer:null,code:'',st:'',oppTeam:null,me:0,err:msg||'',err2:'',reg:false,match:null});
+}
+// "find a match": the Worker pairs you with whoever else is looking for the same thing (a game or a derby).
+// The first one in hosts a room and checks in while it waits; the next one joins that room. The game starts on its own.
+const MATCH_ID=Math.random().toString(36).slice(2,12);
+function matchPost(o){ return fetch(API_BASE+'/match',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:MATCH_ID,kind:MENU.ntype?'d':'g',...o})}).then(r=>r.json()); }
+function findMatch(tries=0){
+  netReset(); mode='lobby'; const M=NET.match={t0:performance.now(),tries}; NET.st='LOOKING FOR AN OPPONENT';
+  probeApi().then(a=>{ if(NET.match!==M) return;
+    if(!a.rooms){ netReset('MATCHMAKING IS OFFLINE'); NET.err2='HOST A GAME AND SHARE THE CODE INSTEAD'; return; }
+    return matchPost({op:'find'}).then(r=>{ if(NET.match!==M) return;
+      if(r.role==='host'){ NET.host=true; NET.me=0; NET.code=r.code; hostRelay();
+        M.keep=setInterval(()=>{ if(NET.match===M&&NET.host&&!NET.oppTeam) matchPost({op:'keep',code:NET.code}).catch(()=>{}); },10000); }
+      else if(r.role==='guest'){ NET.guest=true; NET.me=1; NET.code=r.code; joinRelay(r.code); }
+      else throw new Error('bad reply'); });
+  }).catch(()=>{ if(NET.match===M) netReset("CAN'T REACH THE GAME SERVER"); });
 }
 function netSend(o){ try{ if(NET.conn&&NET.conn.open) NET.conn.send(o); }catch(_){} }
 function netKey(k,v){ netSend({t:'k',k,v}); }
@@ -2205,13 +2221,14 @@ function hostRelay(){
   const c=NET.peer=relayOpen(NET.code,'host'); netWire(c);
   c.on('reg',()=>{ NET.reg=true; NET.st='WAITING FOR PLAYER 2'; });
   c.on('open',()=>{ NET.conn=c; NET.st='CONNECTED'; });
-  c.on('fail',e=>{ if(e==='taken'){ netReset(); hostRoom(); } });
+  c.on('fail',e=>{ if(e==='taken'){ if(NET.match) findMatch(); else { netReset(); hostRoom(); } } });
   c.on('drop',()=>{ if(NET.host&&!NET.err&&!NET.live){ NET.st=''; NET.err="CAN'T REACH THE GAME SERVER"; } });
 }
 function joinRelay(code){
   const c=NET.peer=relayOpen(code,'guest'); netWire(c);
   c.on('open',()=>{ NET.conn=c; NET.st='CONNECTED. WAITING FOR HOST'; netSend({t:'hello',team:myTeamMsg()}); });
-  c.on('fail',e=>{ NET.st=''; NET.err=e==='full'?'THAT GAME IS FULL':'NO GAME WITH CODE '+code; NET.err2=e==='full'?'':'IS THE HOST SCREEN SHOWING THE CODE?'; });
+  c.on('fail',e=>{ if(NET.match&&NET.match.tries<4){ const t=NET.match.tries+1; setTimeout(()=>{ if(NET.match) findMatch(t); },600); return; }   // that host just left: look again
+    NET.st=''; NET.err=e==='full'?'THAT GAME IS FULL':'NO GAME WITH CODE '+code; NET.err2=e==='full'?'':'IS THE HOST SCREEN SHOWING THE CODE?'; });
   c.on('drop',()=>{ if(NET.guest&&!NET.err){ NET.st=''; NET.err="CAN'T REACH THE GAME SERVER"; } });
 }
 function joinPeer(code){
@@ -2240,7 +2257,8 @@ function netMsg(m){
   if(!m||typeof m!=='object') return;
   NET.seen=performance.now();
   if(NET.host){
-    if(m.t==='hello'){ NET.oppTeam=teamFromMsg(m.team); NET.st='READY'; SFX.score(); }
+    if(m.t==='hello'){ NET.oppTeam=teamFromMsg(m.team); NET.st='READY'; SFX.score();
+      if(NET.match) setTimeout(()=>{ if(NET.host&&NET.st==='READY'&&!NET.live&&mode==='lobby') netStart(); },1800); }
     else if(m.t==='k'&&NET.live) setKey(m.k,m.v,1);
     else if(m.t==='pong') NET.rtt=NET.rtt*.7+(performance.now()-m.ts)/1000*.3;
   } else if(NET.guest){
@@ -2287,7 +2305,7 @@ for(const k of Object.keys(SFX)){ const f=SFX[k]; SFX[k]=(...a)=>{ if(NET.host&&
 const LOBBY={code:[0,0,0,0],pos:0};
 function updateLobby(){
   if(NET.host&&NET.st==='READY'&&(took('start')||took('a'))){ SFX.score(); netStart(); return; }
-  if(!NET.host&&!NET.guest&&!NET.err){   // entering a code to join
+  if(!NET.host&&!NET.guest&&!NET.err&&!NET.match){   // entering a code to join
     const e=LOBBY;
     if(took('up')){ e.code[e.pos]=(e.code[e.pos]+1)%26; SFX.blip(); } if(took('down')){ e.code[e.pos]=(e.code[e.pos]+25)%26; SFX.blip(); }
     if(took('left')){ e.pos=Math.max(0,e.pos-1); SFX.blip(); } if(took('right')){ e.pos=Math.min(3,e.pos+1); SFX.blip(); }
@@ -2301,6 +2319,14 @@ function drawLobby(){
   bigText('2 PLAYER',128,14,16,'#fff6d0','#f4b13a'); tiny('ONLINE · EACH PLAYER ON THEIR OWN DEVICE',128,36,C.dim,'center');
   panel(20,50,216,130); const fl=(performance.now()/250|0)%2;
   if(NET.err){ txt(NET.err,128,92,C.red,'center'); if(NET.err2) tiny(NET.err2,128,108,C.dim,'center'); txt(kbMode?'Z BACK':'B BACK',128,150,C.text,'center'); return; }
+  if(NET.match&&!NET.oppTeam&&!(NET.guest&&NET.conn)){ const sec=(performance.now()-NET.match.t0)/1000|0,dots='.'.repeat(1+(performance.now()/400|0)%3);
+    txt('LOOKING FOR AN',128,82,C.text,'center'); txt('OPPONENT'+dots,128,94,C.text,'center');
+    tiny('PLAYING: '+(MENU.ntype?'HOME RUN DERBY':'GAME')+'   '+Math.floor(sec/60)+':'+String(sec%60).padStart(2,'0'),128,118,C.yellow,'center');
+    tiny('LEAVE THIS SCREEN OPEN. IT STARTS WHEN SOMEONE JOINS.',128,134,C.dim,'center');
+    tiny(kbMode?'Z  LEAVE':'B  LEAVE',128,200,C.dim,'center'); return; }
+  if(NET.match){ bigText('MATCH FOUND!',128,70,16,'#fffbe8','#f4c84a','#7a2a14');
+    const t=NET.oppTeam; if(NET.host&&t){ teamChip(t,40,107.5); txt('VS '+t.name,52,108,C.text); }
+    txt(NET.live?'':'GET READY...',128,140,fl?C.yellow:C.dim,'center'); tiny(kbMode?'Z  LEAVE':'B  LEAVE',128,200,C.dim,'center'); return; }
   if(NET.host){
     if(!NET.reg){ txt(NET.st,128,110,fl?C.text:C.dim,'center'); tiny(kbMode?'Z  LEAVE':'B  LEAVE',128,200,C.dim,'center'); return; }
     tiny('YOUR GAME CODE',128,60,C.dim,'center'); bigText(NET.code,128,72,24,'#fffbe8','#f4c84a','#7a2a14');
@@ -2663,11 +2689,12 @@ function hint(){
   let h='';
   if(padToast>0) h='Controller connected. A swing/pitch · B bunt · START pause · SELECT sound';
   else if(mode==='build') h='Type a team name and tap GENERATE, or build it player by player.';
+  else if(mode==='lobby'&&NET.match&&!NET.err) h=`Matchmaking: the game starts as soon as someone joins · ${L.B} leave`;
   else if(mode==='lobby') h=NET.host?(NET.oppTeam?`${L.S} to play · ${L.B} leave`:'Send your friend the game code · '+L.B+' to leave'):NET.guest?`Waiting for the host to start · ${L.B} leave`:`Enter the code from your friend's screen · ${L.B} back`;
   else if(mode==='ach') h=`${L.ud} scroll · ${L.B} back to the menu`;
   else if(mode==='season') h=`${L.A} play the next game · ${L.lr} standings and stats · ${L.B} menu`;
   else if(mode==='title'){ const yt=allTeams()[MENU.you],rk=(menuRows()[MENU.row]||[])[0];
-    h=rk==='mode'&&MENU.mode===4?`TROPHIES: ${achCount()} of ${ACHS.length} unlocked. ${L.S} to see them all.`:rk==='mode'?(MENU.mode===2?'2 PLAYER: online, each player on their own phone or laptop. One hosts, the other joins with the code.':MENU.mode===3?'SEASON: 9 games against 3 teams, with standings and season stats.':`${L.lr} change mode · ${L.S} to play`)
+    h=rk==='net'&&MENU.net===2?'FIND A MATCH: get paired with anyone else looking for a game right now.':rk==='mode'&&MENU.mode===4?`TROPHIES: ${achCount()} of ${ACHS.length} unlocked. ${L.S} to see them all.`:rk==='mode'?(MENU.mode===2?'2 PLAYER: online, each player on their own phone or laptop. One hosts, the other joins with the code.':MENU.mode===3?'SEASON: 9 games against 3 teams, with standings and season stats.':`${L.lr} change mode · ${L.S} to play`)
       :rk==='park'?'WELLS FARM: a tree-farm ballpark with The Pines coffee stand and the big red barn past the fence.'
       :rk==='time'?'DAY or NIGHT game (at night the farm trees light up).'
       :rk==='wind'?'WINDY: a random wind each game. Blowing out carries fly balls farther; blowing in knocks them down.'

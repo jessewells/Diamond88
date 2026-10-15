@@ -1154,14 +1154,13 @@ function catcherParts(k,glove){
   return P;
 }
 function rbiCatcherParts(k){
-  return [{k:'disc',x:16,y:21,r:9,c:k.jer},{k:'rect',x:3,y:19,w:26,h:6,c:k.jer},
-    {k:'disc',x:16,y:9,r:8.2,c:k.cap},{k:'rect',x:15,y:1,w:2,h:16,c:'#f0a050'},{k:'rect',x:8,y:9,w:16,h:2,c:'#f0a050'},
+  return [{k:'disc',x:16,y:9,r:8.2,c:k.cap},{k:'rect',x:15,y:1,w:2,h:16,c:'#f0a050'},{k:'rect',x:8,y:9,w:16,h:2,c:'#f0a050'},
     {k:'rect',x:6,y:13,w:20,h:2,c:k.capD},{k:'rect',x:12,y:16,w:8,h:2,c:k.skinD}];
 }
 function drawCatcher(t,skin){
   const key='CR'+t.abbr+t.jersey+t.cap+t.pants+skin; let c=spr8Cache.get(key);
   if(!c){ c=pixelSprite(32,26,rbiCatcherParts(kit8(t,skin)),false,false,true); spr8Cache.set(key,c); }
-  ctx.drawImage(c,128-16,216-22,32,26); return;
+  ctx.drawImage(c,128-16,216-17,32,26); return;   // only his head shows above the card, like the R.B.I. screen
   ctx.drawImage(c,snap(128-16*1.15),snap(222-28*1.15),32*1.15,28*1.15);   // feet tuck behind the batter card
 }
 // R.B.I.-style batter, seen from behind: grid 40x40 (NES units), feet centred at x 16 on y 38, right-handed (faces the plate to the right).

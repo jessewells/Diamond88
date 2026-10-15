@@ -989,8 +989,9 @@ function pixelSprite(w,h,parts,flip,lit){
   const out=col.slice(),N=[[1,0],[-1,0],[0,1],[0,-1]];
   // rim lighting (hi-res sprites): light from the upper left, so each colour area gets a bright top-left edge and a dark bottom-right one
   if(lit) for(let y=0;y<h;y++) for(let x=0;x<w;x++){ const i=id[y*w+x]; if(i<0||parts[i].flat) continue; const c=col[y*w+x]; if(c===ART_INK) continue;
-    const at=(xx,yy)=>xx<0||yy<0||xx>=w||yy>=h?null:col[yy*w+xx];
-    const hi=at(x-1,y)!==c||at(x,y-1)!==c,lo=at(x+1,y)!==c||at(x,y+1)!==c;
+    // small painted details (eyes, piping, logos) don't count as edges of the shape underneath
+    const edge=(xx,yy)=>{ if(xx<0||yy<0||xx>=w||yy>=h) return true; const j=id[yy*w+xx]; return j<0||(col[yy*w+xx]!==c&&!parts[j].flat); };
+    const hi=edge(x-1,y)||edge(x,y-1),lo=edge(x+1,y)||edge(x,y+1);
     if(lo&&!hi) out[y*w+x]=shadeC(c,.78); else if(hi&&!lo) out[y*w+x]=shadeC(c,1.18); }
   // parts flagged "sep" get a dark line where they cross over earlier parts (arm over chest, etc.)
   for(let y=0;y<h;y++) for(let x=0;x<w;x++){ const i=id[y*w+x]; if(i<0||!parts[i].sep) continue;
@@ -1084,14 +1085,22 @@ function pitcherParts(J,k,ball,u=1){
   const cx=(J.torso[0][0]+J.torso[1][0])/2,cy=J.torso[0][1]+3;
   if(u>1){ P.push({k:'rect',x:R(J.torso[3][0]*u),y:R(J.torso[3][1]*u)-u,w:R((J.torso[2][0]-J.torso[3][0])*u)+1,h:u,c:'#1d1922',flat:1},{k:'rect',x:R(cx*u)-1,y:R(J.torso[3][1]*u)-u,w:2,h:u,c:'#c9b67a',flat:1});
     P.push({k:'rect',x:R((cx-2)*u),y:R(cy*u)-1,w:4*u,h:u,c:k.pan,flat:1},{k:'rect',x:R((cx-2)*u)+1,y:R(cy*u)-1+u,w:4*u-2,h:1,c:k.cap,flat:1},
-      {k:'line',p:[q([cx,J.torso[0][1]+.3]),q([cx,cy-.6])],r0:.45,r1:.45,c:k.cap,flat:1}); }
+      {k:'line',p:[q([cx-1,J.torso[0][1]+.2]),q([cx,J.torso[0][1]+1.2])],r0:.45,r1:.45,c:k.cap,flat:1},{k:'line',p:[q([cx+1,J.torso[0][1]+.2]),q([cx,J.torso[0][1]+1.2])],r0:.45,r1:.45,c:k.cap,flat:1}); }
   else { P.push({k:'rect',x:R(J.torso[3][0]),y:R(J.torso[3][1])-1,w:R(J.torso[2][0]-J.torso[3][0])+1,h:1,c:ART_INK});
     P.push({k:'px',pts:[[R(cx)-2,R(cy),k.pan],[R(cx)-1,R(cy),k.pan],[R(cx),R(cy),k.pan],[R(cx)+1,R(cy),k.pan]]}); }
-  P.push({k:'disc',x:J.head[0]*u,y:J.head[1]*u,r:2.1*u,c:k.skin},{k:'disc',x:J.head[0]*u,y:(J.head[1]-.6)*u,r:2.2*u,c:k.cap,maxY:R(J.head[1]*u)-u},
-         {k:'rect',x:R(J.head[0]*u)-2*u,y:R(J.head[1]*u)-u,w:5*u,h:u,c:k.capD});
-  if(u>1) P.push({k:'rect',x:R(J.head[0]*u)-2,y:R(J.head[1]*u)+1,w:1,h:2,c:ART_INK,flat:1},{k:'rect',x:R(J.head[0]*u)+2,y:R(J.head[1]*u)+1,w:1,h:2,c:ART_INK,flat:1},
-    {k:'rect',x:R(J.head[0]*u)-1,y:R(J.head[1]*u)+3,w:3,h:1,c:k.skinD,flat:1},{k:'rect',x:R(J.head[0]*u)-1,y:R((J.head[1]-2.2)*u),w:2,h:2,c:k.cap2,flat:1});
-  else P.push({k:'px',pts:[[R(J.head[0])-1,R(J.head[1])+.4|0,ART_INK],[R(J.head[0])+1,R(J.head[1])+.4|0,ART_INK]]});
+  if(u>1){ // hi-res head: neck, ears, a rounder face, small eyes, nose, mouth; cap with a front brim and a logo
+    const hx=J.head[0]*u,hy=J.head[1]*u+1,X=R(hx),Y=R(hy),ty=J.torso[0][1]*u;
+    P.push({k:'line',p:[[hx,hy+3],[hx,ty+.5]],r0:1.7,r1:2.1,c:k.skinD},
+      {k:'disc',x:hx-4.4,y:hy+.6,r:1.1,c:k.skinD},{k:'disc',x:hx+4.4,y:hy+.6,r:1.1,c:k.skinD},
+      {k:'disc',x:hx,y:hy,r:4.6,c:k.skin,sep:1},
+      {k:'disc',x:hx,y:hy-1.6,r:4.6,c:k.cap,maxY:Y-2},
+      {k:'rect',x:X-5,y:Y-2,w:11,h:2,c:k.capD},
+      {k:'rect',x:X-1,y:Y-6,w:2,h:2,c:k.cap2,flat:1},
+      {k:'rect',x:X-2,y:Y+1,w:1,h:1,c:ART_INK,flat:1},{k:'rect',x:X+2,y:Y+1,w:1,h:1,c:ART_INK,flat:1},
+      {k:'rect',x:X,y:Y+2,w:1,h:1,c:k.skinD,flat:1},{k:'rect',x:X-1,y:Y+3,w:3,h:1,c:shade(k.skin,.62),flat:1}); }
+  else { P.push({k:'disc',x:J.head[0],y:J.head[1],r:2.1,c:k.skin},{k:'disc',x:J.head[0],y:J.head[1]-.6,r:2.2,c:k.cap,maxY:R(J.head[1])-1},
+         {k:'rect',x:R(J.head[0])-2,y:R(J.head[1])-1,w:5,h:1,c:k.capD}); }
+  if(u===1) P.push({k:'px',pts:[[R(J.head[0])-1,R(J.head[1])+.4|0,ART_INK],[R(J.head[0])+1,R(J.head[1])+.4|0,ART_INK]]});
   arm8(P,J.sR,J.eR,J.hR,k,false,1,1,u); P.push({k:'disc',x:J.hR[0]*u,y:J.hR[1]*u,r:1.5*u,c:k.mitt,sep:1});
   if(u>1) P.push({k:'line',p:[[(J.hR[0]-1)*u,(J.hR[1]-.4)*u],[(J.hR[0]+1)*u,(J.hR[1]-.4)*u]],r0:.4,r1:.4,c:k.lace,flat:1},{k:'disc',x:(J.hR[0]+.4)*u,y:(J.hR[1]+.5)*u,r:.6*u,c:k.mittD,flat:1});
   arm8(P,J.sL,J.eL,J.hL,k,false,1,1,u);

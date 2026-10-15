@@ -3,6 +3,7 @@
 One Worker serves both:
 - **2-player relay**: both devices connect to it, so online games work on any network, cellular included.
 - **Derby leaderboard** (optional): a shared top 10.
+- **Find a match**: `POST /api/match` pairs strangers looking for a game or a derby (uses the same Room Durable Object, so no extra setup).
 
 It runs at `https://diamond88.wellschristmastrees.com/api/*`. The game checks `/api/health` on load and uses whatever is there. With nothing deployed, 2 player falls back to a direct WebRTC connection and the leaderboard stays hidden.
 
@@ -26,6 +27,10 @@ npx wrangler kv namespace create LB
 ```
 
 Paste the `id` it prints into `wrangler.toml` (uncomment the `[[kv_namespaces]]` block), then run `npx wrangler deploy` again. `/api/health` will show `"lb":true` and the derby results screen gets a LEADERBOARD page.
+
+## Updating
+
+After pulling new game changes that touch `worker.js`, run `npx wrangler deploy` again from this folder.
 
 ## Notes
 - Free plan is plenty: Durable Objects on the free plan use the SQLite backend (`new_sqlite_classes` in `wrangler.toml`).

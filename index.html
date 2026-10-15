@@ -1882,15 +1882,17 @@ function teamFromMsg(m){ if(m.builtin) return TEAMS.find(t=>t.id===m.builtin)||T
   const v=m.code&&teamFromCode(m.code); if(!v) return TEAMS[1]; v.id='net'; return fromSaved(v); }
 function netReset(msg){
   try{ NET.conn&&NET.conn.close(); }catch(_){} try{ NET.peer&&NET.peer.destroy(); }catch(_){}
-  Object.assign(NET,{host:false,guest:false,live:false,conn:null,peer:null,code:'',st:'',oppTeam:null,me:0,err:msg||''});
+  Object.assign(NET,{host:false,guest:false,live:false,conn:null,peer:null,code:'',st:'',oppTeam:null,me:0,err:msg||'',err2:'',reg:false});
 }
 function netSend(o){ try{ if(NET.conn&&NET.conn.open) NET.conn.send(o); }catch(_){} }
 function netKey(k,v){ netSend({t:'k',k,v}); }
 function hostRoom(){
-  netReset(); NET.host=true; NET.me=0; NET.code=Array.from({length:4},()=>LETTERS[(Math.random()*26)|0]).join(''); NET.st='STARTING...'; mode='lobby';
+  netReset(); NET.host=true; NET.me=0; NET.code=Array.from({length:4},()=>LETTERS[(Math.random()*26)|0]).join(''); NET.st='CONNECTING TO SERVER...'; NET.reg=false; mode='lobby';
   loadPeer().then(()=>{
     const peer=NET.peer=new Peer(roomId(NET.code),peerOpts());
-    peer.on('open',()=>{ NET.st='WAITING FOR PLAYER 2'; });
+    peer.on('open',()=>{ NET.reg=true; NET.st='WAITING FOR PLAYER 2'; });
+    peer.on('disconnected',()=>{ if(NET.host&&!NET.live) try{ peer.reconnect(); }catch(_){} });   // keep the code registered while waiting
+    setTimeout(()=>{ if(NET.host&&!NET.reg) { NET.st=''; NET.err="CAN'T REACH THE GAME SERVER"; } },12000);
     peer.on('error',e=>{ if(e.type==='unavailable-id'){ netReset(); hostRoom(); } else { NET.st=''; NET.err='NETWORK ERROR ('+e.type+')'; } });
     peer.on('connection',c=>{ if(NET.conn&&NET.conn.open){ c.close(); return; } NET.conn=c; c.on('open',()=>{ NET.st='CONNECTED'; }); netWire(c); });
   }).catch(()=>{ NET.err='COULD NOT LOAD ONLINE PLAY'; });
@@ -1900,9 +1902,12 @@ function joinRoom(code){
   loadPeer().then(()=>{
     const peer=NET.peer=new Peer(undefined,peerOpts());
     peer.on('open',()=>{ const c=NET.conn=peer.connect(roomId(code),{reliable:true,serialization:'json'}); netWire(c);
+      NET.st='FOUND SERVER. LOOKING FOR GAME...';
       c.on('open',()=>{ NET.st='CONNECTED. WAITING FOR HOST'; netSend({t:'hello',team:myTeamMsg()}); });
-      setTimeout(()=>{ if(NET.guest&&!(NET.conn&&NET.conn.open)) { NET.st=''; NET.err='NO GAME WITH CODE '+code; } },9000); });
-    peer.on('error',e=>{ NET.st=''; NET.err=e.type==='peer-unavailable'?'NO GAME WITH CODE '+code:'NETWORK ERROR ('+e.type+')'; });
+      setTimeout(()=>{ if(NET.guest&&!NET.err&&!(NET.conn&&NET.conn.open)) { NET.st=''; NET.err="FOUND GAME, COULDN'T CONNECT"; NET.err2='TRY WITH BOTH DEVICES ON WI-FI'; } },20000); });
+    setTimeout(()=>{ if(NET.guest&&!NET.err&&!(NET.peer&&NET.peer.open)) { NET.st=''; NET.err="CAN'T REACH THE GAME SERVER"; } },12000);
+    peer.on('error',e=>{ NET.st=''; NET.err=e.type==='peer-unavailable'?'NO GAME WITH CODE '+code:'NETWORK ERROR ('+e.type+')';
+      if(e.type==='peer-unavailable') NET.err2='IS THE HOST SCREEN SHOWING THE CODE?'; });
   }).catch(()=>{ NET.err='COULD NOT LOAD ONLINE PLAY'; });
 }
 function netWire(c){
@@ -1976,8 +1981,9 @@ function drawLobby(){
   ctx.drawImage(bgPitch,0,0,W,H); ctx.fillStyle='rgba(6,5,12,.8)'; ctx.fillRect(0,0,W,H);
   bigText('2 PLAYER',128,14,16,'#fff6d0','#f4b13a'); tiny('ONLINE · EACH PLAYER ON THEIR OWN DEVICE',128,36,C.dim,'center');
   panel(20,50,216,130); const fl=(performance.now()/250|0)%2;
-  if(NET.err){ txt(NET.err,128,96,C.red,'center'); txt(kbMode?'Z BACK':'B BACK',128,150,C.text,'center'); return; }
+  if(NET.err){ txt(NET.err,128,92,C.red,'center'); if(NET.err2) tiny(NET.err2,128,108,C.dim,'center'); txt(kbMode?'Z BACK':'B BACK',128,150,C.text,'center'); return; }
   if(NET.host){
+    if(!NET.reg){ txt(NET.st,128,110,fl?C.text:C.dim,'center'); tiny(kbMode?'Z  LEAVE':'B  LEAVE',128,200,C.dim,'center'); return; }
     tiny('YOUR GAME CODE',128,60,C.dim,'center'); bigText(NET.code,128,72,24,'#fffbe8','#f4c84a','#7a2a14');
     tiny('YOUR FRIEND PICKS 2 PLAYER, JOIN, AND ENTERS IT',128,104,C.dim,'center');
     if(NET.oppTeam){ const t=NET.oppTeam; teamChip(t,40,123.5); txt('P2: '+t.name,52,124,C.text);

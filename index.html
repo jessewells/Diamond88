@@ -907,13 +907,27 @@ FP.hrA=fist(FP.runA); FP.hrB=fist(FP.runB); FP.hrC=fist(FP.runC); FP.hrD=fist(FP
 const sprCache=new Map();
 function spr(team,skin,frame,flip,glove,k=1){
   const key=team.abbr+team.jersey+team.cap+team.pants+skin+frame+(flip?1:0)+(glove?1:0)+k; let c=sprCache.get(key); if(c) return c;
-  const LW=26*k,LH=22*k,ax=13*k,ay=20.5*k;
-  c=document.createElement('canvas'); c.width=Math.ceil(LW*RS); c.height=Math.ceil(LH*RS);
-  const g=c.getContext('2d',{willReadFrequently:true}); g.setTransform(RS,0,0,RS,0,0);
-  const P=FP[frame];
-  drawSkel(g,ax,ay,3.3*k,flip?-1:1,P,team,{skin,glove:glove?'F':null,o:.5});
-  const img=g.getImageData(0,0,c.width,c.height),d=img.data; for(let i=3;i<d.length;i+=4) d[i]=d[i]>=110?255:0; g.putImageData(img,0,0);
-  c.lw=LW; c.lh=LH; c.ax=ax; c.ay=ay; sprCache.set(key,c); return c;
+  // R.B.I.-style NES sprite: the FP pose on a chunky pixel grid (1 art pixel = 1 game pixel), big capped head, flat colours, black outline
+  const u=k*3.3,w=Math.max(6,Math.round(22*k)),h=Math.max(7,Math.round(24*k)),ox=w/2,oy=h-1.5,P=FP[frame],kt=kit8(team,skin);
+  const q=p=>[ox+p[0]*u,oy-p[1]*u],L=(a,b,r0,r1,c,sep)=>({k:'line',p:[q(a),q(b)],r0:r0*k,r1:r1*k,c,sep}),parts=[],front=!!P.front;
+  const leg=(hip,kn,an,far)=>{ const toe=[an[0]+(front?(an[0]<0?-.25:.25):.5),an[1]-.05];
+    const sk=lerp2(kn,an,.55); parts.push(L(hip,kn,1.5,1.25,far?kt.panD:kt.pan),L(kn,sk,1.25,1.1,far?kt.panD:kt.pan),L(sk,an,1.05,.95,far?kt.capD:kt.cap),L(an,toe,1,.9,kt.shoe)); };
+  const arm=(sh,el,hd,far,gl)=>{ parts.push(L(sh,el,1.15,1,far?kt.jerD:kt.jer,1),L(el,hd,.95,.85,far?kt.skinD:kt.skin,1));
+    if(gl) parts.push({k:'disc',x:q(hd)[0],y:q(hd)[1],r:1.4*k,c:kt.mitt,sep:1}); };
+  const torso=()=>{ const n=q(P.neck),pl=q(P.pel),hw=(front?2.9:2.2)*k;
+    parts.push({k:'poly',p:[[n[0]-hw,n[1]],[n[0]+hw,n[1]],[pl[0]+hw*.85,pl[1]+.5],[pl[0]-hw*.85,pl[1]+.5]],c:kt.jer});
+    parts.push({k:'rect',x:Math.round(pl[0]-hw*.85),y:Math.round(pl[1]),w:Math.round(hw*1.7)+1,h:1,c:kt.pan}); };
+  const head=()=>{ const c=q([P.head[0]+(front?0:.1),P.head[1]+.4]),hr=2.7*k,dir=front?0:1;
+    parts.push({k:'disc',x:c[0],y:c[1]+.3*k,r:hr,c:kt.skin});
+    parts.push({k:'disc',x:c[0]-dir*.4*k,y:c[1]-.5*k,r:hr*1.05,c:kt.cap,maxY:Math.round(c[1]-.4*k)});
+    if(front) parts.push({k:'rect',x:Math.round(c[0]-hr),y:Math.round(c[1]-.4*k),w:Math.round(hr*2)+1,h:Math.max(1,Math.round(.6*k)),c:kt.capD});
+    else parts.push({k:'rect',x:Math.round(c[0]),y:Math.round(c[1]-.4*k),w:Math.round(hr*1.6)+1,h:Math.max(1,Math.round(.6*k)),c:kt.capD});
+    if(k>=.8){ if(front) parts.push({k:'px',pts:[[Math.round(c[0]-.8*k),Math.round(c[1]+.6*k),ART_INK],[Math.round(c[0]+.8*k),Math.round(c[1]+.6*k),ART_INK]]});
+      else parts.push({k:'px',pts:[[Math.round(c[0]+1.1*k),Math.round(c[1]+.6*k),ART_INK]]}); } };
+  if(front){ leg(P.hipF,P.kF,P.aF,false); leg(P.hipN,P.kN,P.aN,false); torso(); arm(P.sF,P.eF,P.hF,false,glove); arm(P.sN,P.eN,P.hN,false,false); head(); }
+  else { arm(P.sF,P.eF,P.hF,true,glove); leg(P.hipF,P.kF,P.aF,true); leg(P.hipN,P.kN,P.aN,false); torso(); arm(P.sN,P.eN,P.hN,false,false); head(); }
+  c=pixelSprite(w,h,parts,flip,false);
+  c.lw=w; c.lh=h; c.ax=ox; c.ay=oy; sprCache.set(key,c); return c;
 }
 function drawSpr(c,x,y){ ctx.drawImage(c,snap(x-c.ax),snap(y-c.ay),c.lw,c.lh); }
 
@@ -1960,14 +1974,18 @@ function drawPitch(){
     for(let i=0;i<10;i++){ const r1=4+P.t*20,r2=12+P.t*70*(i%2?.6:1); ctx.strokeStyle=i%2?'#f4c84a':'#ffffff'; ctx.lineWidth=1.5;
       ctx.beginPath(); ctx.moveTo(Math.cos(i*.628)*r1,Math.sin(i*.628)*r1); ctx.lineTo(Math.cos(i*.628)*r2,Math.sin(i*.628)*r2); ctx.stroke(); }
     ctx.restore(); }
-  // batter card
-  const gr=ctx.createLinearGradient(0,224,0,240); gr.addColorStop(0,'#1a1622'); gr.addColorStop(1,'#09080d');
-  ctx.fillStyle=gr; ctx.fillRect(0,224,W,16); ctx.fillStyle='#4a4158'; ctx.fillRect(0,224,W,.5);
-  teamChip(off,4,227.5); txt(String(G.ab[G.half]%9+1),14,228,C.dim); txt(bt[0],24,228);
-  const hx=26+bt[0].length*8; ctx.fillStyle='#2e2838'; ctx.fillRect(hx,227,11,10); txt(bt[1],hx+2,228,C.yellow);
-  tiny('PWR',hx+15,230,C.dim); const pw=Math.round(bt[2]*5);
-  for(let i=0;i<5;i++){ ctx.fillStyle=i<pw?C.yellow:'#2e2838'; ctx.fillRect(hx+29+i*4,229,3,6); }
-  if(P.rel!==undefined) txt(P.type+' '+P.mph,252,228,C.dim,'right'); else txt(def.pitcher.name,252,228,C.dim,'right');
+  // runners on 1st and 3rd get R.B.I.-style windows in the lower corners
+  if(!G.derby){ if(G.bases[2]) drawBaseWin(3,3,186,def,off); if(G.bases[0]) drawBaseWin(1,201,186,def,off); }
+  // batter / pitcher cards, R.B.I. style: name on top, the card stats under it
+  const gr=ctx.createLinearGradient(0,216,0,240); gr.addColorStop(0,'#1a1622'); gr.addColorStop(1,'#09080d');
+  ctx.fillStyle=gr; ctx.fillRect(0,216,W,24); ctx.fillStyle='#4a4158'; ctx.fillRect(0,216,W,.5);
+  const cs=cardStats(bt),pc=def.pitcher;
+  teamChip(off,4,219.5); txt(String(G.ab[G.half]%9+1),14,220,C.dim); txt(bt[0],24,220);
+  const hx=26+bt[0].length*8; ctx.fillStyle='#2e2838'; ctx.fillRect(hx,219,11,10); txt(bt[1],hx+2,220,C.yellow);
+  tiny('AVG '+cs.avg+'   HR '+cs.hr,14,232,C.text); tiny('PWR',98,232,C.dim); const pw=Math.round(bt[2]*5);
+  for(let i=0;i<5;i++){ ctx.fillStyle=i<pw?C.yellow:'#2e2838'; ctx.fillRect(112+i*4,231,3,6); }
+  txt(pc.name,252,220,C.text,'right');
+  tiny(P.rel!==undefined?P.type+' '+P.mph+' MPH':'ERA '+pitchERA(pc),252,232,P.rel!==undefined?C.yellow:C.text,'right');
   if(P.state==='after'&&!P.hbp&&P.locX!==undefined){
     const a=pp(-.95,0,3.6),b=pp(.95,0,1.6),dot=pp(P.locX,0,2.6),inZ=Math.abs(P.locX)<=.95;
     ctx.strokeStyle='rgba(246,242,230,.7)'; ctx.lineWidth=1; ctx.setLineDash([2,2]); ctx.strokeRect(snap(a[0]),snap(a[1]),snap(b[0]-a[0]),snap(b[1]-a[1])); ctx.setLineDash([]);
@@ -1993,6 +2011,26 @@ function drawPitch(){
     const ball=P.msg.startsWith('BALL');
     if(big) bigText(P.msg,128,61,16,ball?'#c9ffcf':'#fff6d0',ball?'#3fae4c':'#f4b13a'); else bigText(P.msg,128,65,8,ball?'#c9ffcf':'#fff6d0',ball?'#3fae4c':'#f4b13a');
     ctx.globalAlpha=1; }
+}
+// card stats like the back of an R.B.I. cartridge roster: fixed numbers that follow from the ratings (same every game)
+function cardStats(b){ const r=rng(strHash(b[0]+'card')); return {avg:'.'+String(Math.round(205+b[3]*110+r()*25)).padStart(3,'0'),hr:Math.round(b[2]*b[2]*38+r()*6)}; }
+function pitchERA(p){ const r=rng(strHash(p.name+'era')); return (6.1-p.ctrl*2.4-p.velo*2.2+r()*.5).toFixed(2); }
+// a little overhead window on 1st or 3rd base: the baseman, the bag and the runner taking his lead (or running on a steal)
+function drawBaseWin(base,x,y,def,off){
+  const w=52,h=28,b=BASE[base],s=.5,cx=x+w/2,cy=y+h/2+3,S=(wx,wy)=>[cx+(wx-b[0])*s,cy-(wy-b[1])*s*.78];
+  ctx.save(); ctx.fillStyle=ART_INK; ctx.fillRect(x-1,y-1,w+2,h+2); ctx.beginPath(); ctx.rect(x,y,w,h); ctx.clip();
+  ctx.fillStyle='#4f9c46'; ctx.fillRect(x,y,w,h);
+  ctx.fillStyle='#cc9058'; ctx.beginPath(); ctx.ellipse(cx,cy,15*s*2,15*s*.78*2,0,0,7); ctx.fill();
+  const h0=S(0,0),hb=S(b[0]*2,b[1]*2); ctx.strokeStyle='#f6f2e6'; ctx.lineWidth=.8; ctx.beginPath(); ctx.moveTo(h0[0],h0[1]); ctx.lineTo(hb[0],hb[1]); ctx.stroke();
+  const p=S(b[0],b[1]); ctx.fillStyle='#ffffff'; ctx.fillRect(p[0]-1.5,p[1]-1,3,2);
+  // runner leads toward the next base; on a steal he's on his way
+  const nx=BASE[base+1],dx=nx[0]-b[0],dy=nx[1]-b[1],L=hyp(dx,dy); let lead=16,mv=false;
+  if(P.steal&&P.steal.who.includes(base)){ const t=stealRel()-P.steal.rel; if(t>0){ lead=Math.min(80,10+t*22); mv=true; } }
+  const ri=G.bases[base-1],rp=[b[0]+dx/L*lead,b[1]+dy/L*lead],fp=base===1?[b[0]+19,b[1]+13]:[b[0]-19,b[1]+13];
+  const ents=[{p:fp,c:spr(def,skinOf(def.lineup[(base===1?2:5)%9][0]),'stand',base===1,true,.8)},
+    {p:rp,c:spr(off,skinOf(ri[0]),mv?'run'+'ABCD'[(performance.now()/80|0)%4]:'stand',dx<0,false,.8)}];
+  ents.sort((a,b2)=>b2.p[1]-a.p[1]).forEach(e=>{ const q=S(e.p[0],e.p[1]); shadowEll(q[0],q[1],3,1); drawSpr(e.c,q[0],q[1]); });
+  ctx.restore(); tiny(base===1?'1ST':'3RD',x+2,y+h-6,'#ffffff');
 }
 function drawField(){
   const sx0=clamp(Math.round(CAM.x*RS),0,(WW-W)*RS),sy0=clamp(Math.round((CAM.y+22)*RS),0,(WH-218)*RS);

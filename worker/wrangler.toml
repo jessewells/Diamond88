@@ -2,6 +2,11 @@ name = "diamond88-api"
 main = "worker.js"
 compatibility_date = "2026-09-01"
 
+# serve the API under the game's own domain (the diamond88 DNS record must stay Proxied)
+routes = [
+  { pattern = "diamond88.wellschristmastrees.com/api/*", zone_name = "wellschristmastrees.com" }
+]
+
 # 2-player relay: one Durable Object per game code
 [[durable_objects.bindings]]
 name = "ROOMS"
@@ -15,7 +20,3 @@ new_sqlite_classes = ["Room"]
 # [[kv_namespaces]]
 # binding = "LB"
 # id = "PASTE_KV_NAMESPACE_ID_HERE"
-
-routes = [
-  { pattern = "diamond88.wellschristmastrees.com/api/*", zone_name = "wellschristmastrees.com" }
-]

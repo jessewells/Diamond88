@@ -1,7 +1,21 @@
-name = "diamond88-lb"
+name = "diamond88-api"
 main = "worker.js"
 compatibility_date = "2026-09-01"
 
-[[kv_namespaces]]
-binding = "LB"
-id = "PASTE_KV_NAMESPACE_ID_HERE"
+# 2-player relay: one Durable Object per game code
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "Room"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room"]
+
+# derby leaderboard (optional): create a KV namespace and paste its id
+# [[kv_namespaces]]
+# binding = "LB"
+# id = "PASTE_KV_NAMESPACE_ID_HERE"
+
+routes = [
+  { pattern = "diamond88.wellschristmastrees.com/api/*", zone_name = "wellschristmastrees.com" }
+]

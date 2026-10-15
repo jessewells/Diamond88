@@ -1,7 +1,11 @@
-// Diamond '88 derby leaderboard: a Cloudflare Worker with one KV namespace (binding LB).
-//   GET  /top    -> top 10 [{n, hr, lvl, d}]
-//   POST /score  {n:"ABC", hr:7, lvl:0|1|2} -> updated top 10
-const ORIGINS = ['https://jessewells.github.io', 'https://diamond88.wellschristmastrees.com'];
+// Diamond '88 API: one Cloudflare Worker for the online 2-player relay and the derby leaderboard.
+// Served at https://diamond88.wellschristmastrees.com/api/* (a route) or the workers.dev URL.
+//
+//   GET  /health         -> {ok, rooms, lb}  (the game probes this to decide whether to use the relay)
+//   WS   /room/ABCD?role=host|guest           2-player relay: whatever one side sends, the other receives
+//   GET  /top            -> top 10 [{n, hr, lvl, d}]          (needs the LB KV binding)
+//   POST /score {n,hr,lvl} -> updated top 10                  (needs the LB KV binding)
+const ORIGINS = ['https://diamond88.wellschristmastrees.com', 'https://jessewells.github.io'];
 const MAX = 10;
 
 function cors(req) {
@@ -19,12 +23,22 @@ const json = (req, body, status = 200) =>
 export default {
   async fetch(req, env) {
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(req) });
-    const { pathname } = new URL(req.url);
+    const path = new URL(req.url).pathname.replace(/^\/api(?=\/)/, '');   // works on the route and on workers.dev
+
+    if (path === '/health') return json(req, { ok: true, rooms: !!env.ROOMS, lb: !!env.LB });
+
+    const room = path.match(/^\/room\/([A-Z]{4})$/);
+    if (room) {
+      if (!env.ROOMS) return json(req, { error: 'relay not configured' }, 503);
+      if (req.headers.get('upgrade') !== 'websocket') return json(req, { error: 'expected websocket' }, 426);
+      return env.ROOMS.get(env.ROOMS.idFromName(room[1])).fetch(req);
+    }
+
+    if (!env.LB) return json(req, { error: 'leaderboard not configured' }, 503);
     const top = (await env.LB.get('top', 'json')) || [];
+    if (path === '/top' && req.method === 'GET') return json(req, top);
 
-    if (pathname === '/top' && req.method === 'GET') return json(req, top);
-
-    if (pathname === '/score' && req.method === 'POST') {
+    if (path === '/score' && req.method === 'POST') {
       // one score per IP every 20 seconds
       const ip = req.headers.get('cf-connecting-ip') || 'x';
       if (await env.LB.get('rl:' + ip)) return json(req, { error: 'slow down' }, 429);
@@ -47,3 +61,43 @@ export default {
     return json(req, { error: 'not found' }, 404);
   },
 };
+
+// One Durable Object per game code. It holds the host's and the guest's sockets and passes
+// messages straight through. Control messages from the relay itself start with "_".
+export class Room {
+  constructor(state) { this.state = state; }
+
+  async fetch(req) {
+    const role = new URL(req.url).searchParams.get('role') === 'host' ? 'host' : 'guest';
+    const n = r => this.state.getWebSockets(r).length;
+    // turned-away sockets get the tag "x" so closing them doesn't disturb the real players
+    const err = role === 'host' ? (n('host') ? 'taken' : '') : (!n('host') ? 'nogame' : n('guest') ? 'full' : '');
+    const [client, server] = Object.values(new WebSocketPair());
+    this.state.acceptWebSocket(server, [err ? 'x' : role]);
+    const say = (ws, o) => { try { ws.send(JSON.stringify(o)); } catch {} };
+
+    if (err) { say(server, { t: '_err', e: err }); server.close(4000, err); }
+    else if (role === 'host') say(server, { t: '_ok' });
+    else {
+      say(server, { t: '_peer' });
+      for (const h of this.state.getWebSockets('host')) say(h, { t: '_peer' });
+    }
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  webSocketMessage(ws, msg) {
+    if (this.state.getTags(ws)[0] === 'x') return;
+    const other = this.state.getTags(ws)[0] === 'host' ? 'guest' : 'host';
+    for (const o of this.state.getWebSockets(other)) { try { o.send(msg); } catch {} }
+  }
+
+  webSocketClose(ws) {
+    const role = this.state.getTags(ws)[0], other = role === 'host' ? 'guest' : 'host';
+    if (role === 'x') return;
+    for (const o of this.state.getWebSockets(other)) {
+      try { o.send(JSON.stringify({ t: '_left' })); if (role === 'host') o.close(1000, 'host left'); } catch {}
+    }
+  }
+
+  webSocketError(ws) { this.webSocketClose(ws); }
+}

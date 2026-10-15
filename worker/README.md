@@ -1,24 +1,33 @@
-# Derby leaderboard (Cloudflare Worker)
+# Diamond '88 API (Cloudflare Worker)
 
-The game shows a shared top-10 HR Derby board once this Worker is running and its URL is set in `index.html`.
+One Worker serves both:
+- **2-player relay**: both devices connect to it, so online games work on any network, cellular included.
+- **Derby leaderboard** (optional): a shared top 10.
 
-## Set up in the Cloudflare dashboard (no command line needed)
+It runs at `https://diamond88.wellschristmastrees.com/api/*`. The game checks `/api/health` on load and uses whatever is there. With nothing deployed, 2 player falls back to a direct WebRTC connection and the leaderboard stays hidden.
 
-1. **Workers & Pages → KV → Create namespace.** Name it `diamond88-lb`.
-2. **Workers & Pages → Create → Worker.** Name it `diamond88-lb` and click Deploy.
-3. **Edit code:** replace everything with the contents of `worker.js` and click Deploy.
-4. **Settings → Bindings → Add → KV namespace.** Variable name `LB`, namespace `diamond88-lb`. Save and deploy.
-5. Copy the Worker's URL (like `https://diamond88-lb.<your-subdomain>.workers.dev`).
-6. In `index.html`, set `const LB_URL='https://diamond88-lb.<your-subdomain>.workers.dev';` and commit.
+## Deploy (laptop, about 5 minutes)
 
-Check it: open `<worker url>/top` in a browser. You should see `[]`.
-
-## Or with Wrangler
+Needs Node.js. From this folder:
 
 ```sh
-cd worker
-npx wrangler kv namespace create LB     # paste the id into wrangler.toml
-npx wrangler deploy
+npx wrangler login          # opens the browser; approve access to your Cloudflare account
+npx wrangler deploy         # creates the Worker, the Room Durable Object and the /api/* route
 ```
 
-Allowed origins are listed at the top of `worker.js` (`jessewells.github.io` and `diamond88.wellschristmastrees.com`).
+Check it: https://diamond88.wellschristmastrees.com/api/health should show `{"ok":true,"rooms":true,...}`.
+
+That's all the game needs for 2 player. Hard-refresh both devices and host or join as usual.
+
+## Turn on the leaderboard (optional)
+
+```sh
+npx wrangler kv namespace create LB
+```
+
+Paste the `id` it prints into `wrangler.toml` (uncomment the `[[kv_namespaces]]` block), then run `npx wrangler deploy` again. `/api/health` will show `"lb":true` and the derby results screen gets a LEADERBOARD page.
+
+## Notes
+- Free plan is plenty: Durable Objects on the free plan use the SQLite backend (`new_sqlite_classes` in `wrangler.toml`).
+- The route needs the `diamond88` DNS record to stay **Proxied** (orange cloud).
+- Allowed origins are at the top of `worker.js`.

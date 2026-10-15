@@ -565,9 +565,19 @@ const tinyFont=s=>s+'px "Press Start 2P", ui-monospace, monospace';
 function buildWorld(){
   const [c,g]=mk(WW,WH);
   paint(g,WW,WH,(X,Y)=>{ const x=((X+.5)/RS-WX0)/FK,y=(WY0-(Y+.5)/RS)/(FK*FT); return groundRGB(x,y,1.6)||standsRGB(x,y); });
+  // the outfield wall stands up 8ft (the home-run height), so a ball that hits it is seen hitting it
+  const WALL_H=8,face=(a0,a1,col)=>{ g.fillStyle=col; g.beginPath();
+    for(let a=a0;a<=a1+1e-6;a+=.5){ const p=fw(...polar(fenceR(a),a),0); a===a0?g.moveTo(p[0],p[1]):g.lineTo(p[0],p[1]); }
+    for(let a=a1;a>=a0-1e-6;a-=.5){ const p=fw(...polar(fenceR(a),a),WALL_H); g.lineTo(p[0],p[1]); }
+    g.closePath(); g.fill(); };
+  for(let i=0;i<8;i++) face(-45+i*11.25,-45+(i+1)*11.25,['#1d5a3e','#a8302a','#1d5a3e','#26408a'][i%4]);
+  g.strokeStyle='#f4c84a'; g.lineWidth=1; g.beginPath();
+  for(let a=-45;a<=45;a+=.5){ const p=fw(...polar(fenceR(a),a),WALL_H); a===-45?g.moveTo(p[0],p[1]):g.lineTo(p[0],p[1]); } g.stroke();
+  g.strokeStyle='#0d2a1d'; g.beginPath();
+  for(let a=-45;a<=45;a+=.5){ const p=fw(...polar(fenceR(a),a),0); a===-45?g.moveTo(p[0],p[1]):g.lineTo(p[0],p[1]); } g.stroke();
   g.font=tinyFont(4); g.textAlign='center'; g.textBaseline='middle';
-  [[-38,'330'],[-20,'375'],[0,'400'],[20,'375'],[38,'330']].forEach(([a,s])=>{ const p=fw(...polar(fenceR(a)+4.4,a)); g.fillStyle='#143f2b'; g.fillRect(p[0]-7,p[1]-2.6,14,5.2); g.fillStyle='#f4e9c8'; g.fillText(s,p[0],p[1]+.2); });
-  [-45,45].forEach(a=>{ const p=fw(...polar(fenceR(45)+1,a)); g.fillStyle='#f4c84a'; g.fillRect(p[0]-.5,p[1]-14,1,14); g.fillRect(p[0]-1.5,p[1]-14,3,1); });
+  [[-38,'330'],[-20,'375'],[0,'400'],[20,'375'],[38,'330']].forEach(([a,s])=>{ const p=fw(...polar(fenceR(a),a),WALL_H/2); g.fillStyle='#143f2b'; g.fillRect(p[0]-7,p[1]-2.6,14,5.2); g.fillStyle='#f4e9c8'; g.fillText(s,p[0],p[1]+.2); });
+  [-45,45].forEach(a=>{ const p=fw(...polar(fenceR(45)+1,a)); g.fillStyle='#f4c84a'; g.fillRect(p[0]-.5,p[1]-26,1,26); g.fillRect(p[0]-1.5,p[1]-26,3,1); });
   return c;
 }
 const ADS=[{a0:-16,a1:-5,t:'THE PINES COFFEE',bg:'#24563a',fg:'#f3e9cf'},{a0:5,a1:16,t:'WELLS FAMILY TREES',bg:'#7a1f2b',fg:'#f6e7c8'},

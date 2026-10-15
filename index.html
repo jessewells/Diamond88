@@ -260,7 +260,8 @@ const mkKeys=()=>({up:0,down:0,left:0,right:0,a:0,b:0,start:0,select:0});
 const RK=[mkKeys(),mkKeys()],RP=[{},{}];
 let keys=RK[0],pressed=RP[0],pkeys=RK[0],ppressed=RP[0];
 const vsOn=()=>mode==='play'&&G&&G.vs;
-function setKey(k,v,pl=0){ if(!vsOn()) pl=0; const K=RK[pl]; if(v&&!K[k]){RP[pl][k]=1; audioInit();} K[k]=v?1:0; }
+function setKey(k,v,pl=0){ if(NET.guest&&NET.live&&pl===0){ netKey(k,v); }
+  if(!vsOn()) pl=0; const K=RK[pl]; if(v&&!K[k]){RP[pl][k]=1; audioInit();} K[k]=v?1:0; }
 function clearKeys(){ for(const K of RK) for(const k in K) K[k]=0; clearPressed(); }
 function clearPressed(){ for(const p of RP) for(const k in p) delete p[k]; }
 function routeInput(){
@@ -273,7 +274,7 @@ const anyTook=()=>['a','b','start','up','down','left','right'].some(k=>pressed[k
 
 document.querySelectorAll('[data-k]').forEach(el=>{
   const k=el.dataset.k;
-  const on=e=>{e.preventDefault(); try{el.setPointerCapture(e.pointerId);}catch(_){} el._pl=vsOn()?G.pl[G.half]:0; setKey(k,1,el._pl); el.classList.add('on');};
+  const on=e=>{e.preventDefault(); try{el.setPointerCapture(e.pointerId);}catch(_){} el._pl=0; setKey(k,1,0); el.classList.add('on');};
   const off=e=>{setKey(k,0,el._pl||0); el.classList.remove('on');};
   el.addEventListener('pointerdown',on);
   ['pointerup','pointercancel','lostpointercapture'].forEach(t=>el.addEventListener(t,off));
@@ -285,7 +286,7 @@ function dpadAt(e){
   const s={left:dx<-t,right:dx>t,up:dy<-t,down:dy>t};
   // keep one axis unless clearly diagonal
   if(Math.abs(dx)>Math.abs(dy)*2.2){s.up=s.down=false;} else if(Math.abs(dy)>Math.abs(dx)*2.2){s.left=s.right=false;}
-  if(dpad._pl===undefined) dpad._pl=vsOn()?G.pl[G.half]:0;
+  dpad._pl=0;
   for(const k in s) setKey(k,s[k],dpad._pl);
   dpad.dataset.dir=(s.up?'u ':'')+(s.down?'d ':'')+(s.left?'l ':'')+(s.right?'r':'');
 }
@@ -295,32 +296,6 @@ dpad.addEventListener('pointermove',e=>{ if(e.buttons||e.pointerType==='touch') 
 ['pointerup','pointercancel','lostpointercapture'].forEach(t=>dpad.addEventListener(t,dpadOff));
 const KMAP={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right',KeyW:'up',KeyS:'down',KeyA:'left',KeyD:'right',
   KeyX:'a',KeyK:'a',Space:'a',KeyZ:'b',KeyJ:'b',Enter:'start',KeyP:'start',Escape:'start',KeyM:'select'};
-const KMAP_VS={KeyW:['up',0],KeyS:['down',0],KeyA:['left',0],KeyD:['right',0],KeyG:['a',0],KeyF:['b',0],
-  ArrowUp:['up',1],ArrowDown:['down',1],ArrowLeft:['left',1],ArrowRight:['right',1],Slash:['a',1],Period:['b',1],
-  Enter:['start',0],KeyP:['start',0],Escape:['start',0],KeyM:['select',0]};
-const keyOf=code=>vsOn()?KMAP_VS[code]:(KMAP[code]?[KMAP[code],0]:null);
-// pitcher touch buttons drawn along the bottom of the batting view in 2-player games
-const TBTN=[{k:'left',t:'◀',hold:1},{k:'FAST',t:'HEAT'},{k:'CURVE',t:'CURVE'},{k:'CHANGE',t:'CHG'},{k:'pen',t:'PEN'},{k:'right',t:'▶',hold:1}];
-const touchPitch=()=>vsOn()&&!kbMode&&G.phase==='pitch'&&!G.banner&&!paused&&P&&(P.state==='ready'||P.state==='flight');
-function tbtnAt(e){ const r=cv.getBoundingClientRect(),x=(e.clientX-r.left)/r.width*W,y=(e.clientY-r.top)/r.height*H;
-  if(y<196||y>220) return null; const i=Math.floor((x-4)/41.5); return i>=0&&i<6?i:null; }
-cv.addEventListener('pointerdown',e=>{
-  if(!touchPitch()) return; const i=tbtnAt(e); if(i===null) return; e.preventDefault();
-  const pp=G.pl[1-G.half],b=G.pen?(i<=1?'a':i===4?'b':null):TBTN[i].k; if(!b) return;
-  if(b==='left'||b==='right'){ cv._hold=b; setKey(b,1,pp); }
-  else if(b==='pen'||b==='b'){ setKey('b',1,pp); setKey('b',0,pp); }
-  else if(b==='a'){ setKey('a',1,pp); setKey('a',0,pp); }
-  else if(P.state==='ready'){ P.typeReq=b; setKey('a',1,pp); setKey('a',0,pp); }
-});
-['pointerup','pointercancel','pointerleave'].forEach(t=>cv.addEventListener(t,()=>{ if(cv._hold&&G&&G.pl){ setKey(cv._hold,0,G.pl[1-G.half]); } cv._hold=null; }));
-function drawTouchPitch(){
-  if(!touchPitch()) return;
-  const lab=G.pen?['BRING','IN','','','BACK','']:TBTN.map(b=>b.t);
-  for(let i=0;i<6;i++){ if(!lab[i]) continue; const x=4+i*41.5;
-    ctx.fillStyle='rgba(12,10,18,.78)'; ctx.fillRect(x,197,39,22); ctx.strokeStyle='#4a4158'; ctx.lineWidth=1; ctx.strokeRect(x+.5,197.5,38,21);
-    txt(lab[i],x+19.5,204,i===0||i===5?C.yellow:C.text,'center'); }
-}
-
 // keyboard vs touch decides how on-screen tips name the controls
 let kbMode=matchMedia('(hover:hover) and (pointer:fine)').matches;
 addEventListener('keydown',()=>{kbMode=true;},{capture:true});
@@ -329,7 +304,7 @@ addEventListener('pointerdown',e=>{ if(e.pointerType==='touch') kbMode=false; },
 const padHeld=[{},{}]; let padToast=0;
 addEventListener('gamepadconnected',()=>{ padToast=4; kbMode=false; });
 function pollPad(){
-  const pads=[...(navigator.getGamepads?navigator.getGamepads():[])].filter(p=>p&&p.connected).slice(0,2);
+  const pads=[...(navigator.getGamepads?navigator.getGamepads():[])].filter(p=>p&&p.connected).slice(0,1);
   pads.forEach((gp,pl)=>{
     const bt=i=>!!(gp.buttons[i]&&gp.buttons[i].pressed),ax=gp.axes||[],H=padHeld[pl];
     const st={a:bt(0)||bt(3),b:bt(1)||bt(2),start:bt(9),select:bt(8),
@@ -337,8 +312,8 @@ function pollPad(){
     for(const k in st) if(st[k]!==!!H[k]){ H[k]=st[k]; setKey(k,st[k],pl); if(st[k]) kbMode=false; }
   });
 }
-addEventListener('keydown',e=>{ if(mode==='build'){ if(e.code==='Escape') closeBuilder(); return; } const k=keyOf(e.code); if(k){e.preventDefault(); if(!e.repeat) setKey(k[0],1,k[1]);}});
-addEventListener('keyup',e=>{const k=keyOf(e.code); if(k) setKey(k[0],0,k[1]); else if(KMAP[e.code]) setKey(KMAP[e.code],0);});
+addEventListener('keydown',e=>{ if(mode==='build'){ if(e.code==='Escape') closeBuilder(); return; } const k=KMAP[e.code]; if(k){e.preventDefault(); if(!e.repeat) setKey(k,1);}});
+addEventListener('keyup',e=>{const k=KMAP[e.code]; if(k) setKey(k,0);});
 addEventListener('blur',clearKeys);
 
 /* ---------------- audio ---------------- */
@@ -1018,7 +993,7 @@ function camUpdate(dt,now){
 
 /* ---------------- game state ---------------- */
 let mode='title',G=null,P=null,F=null,paused=false,titleIdle=0,overT=0;
-const MENU={row:0,you:0,cpu:1,inn:0,bat:1,lvl:1,mode:0,fld:0,sea:0};
+const MENU={row:0,you:0,cpu:1,inn:0,bat:1,lvl:1,mode:0,fld:0,sea:0,net:0};
 const MODES=['GAME','HR DERBY','2 PLAYER','SEASON'];
 // derby leaderboard: set to the deployed Cloudflare Worker URL (see worker/README.md); empty = feature off
 const LB_URL='';
@@ -1038,11 +1013,11 @@ const handOf=b=>b[1]==='L'?-1:1;
 function newGame(you,cpu,innings,batSecond,demo,opts={}){
   if(opts.derby) batSecond=true;
   const L=allTeams(),cl=t=>({...t,pitcher:t.staff[0],lineup:t.lineup.slice(),bench:(t.bench||[]).slice()});
-  const away=cl(L[batSecond?cpu:you]),home=cl(L[batSecond?you:cpu]);
+  const T=x=>typeof x==='object'?x:L[x],away=cl(T(batSecond?cpu:you)),home=cl(T(batSecond?you:cpu));
   G={teams:[away,home],human:demo?-1:(batSecond?1:0),innings,inning:1,half:0,score:[0,0],line:[[0],[]],hits:[0,0],
      outs:0,balls:0,strikes:0,bases:[null,null,null],ab:[0,0],phase:'pitch',banner:null,demo,batOff:0,pa:0,streakAt:Math.random()<.3?6+((Math.random()*24)|0):-1};
   G.lv=LVL[opts.vs?1:opts.lv===undefined?1:opts.lv]; G.fb=null; G.overPg=0; G.pen=false; G.benchUI=null;
-  G.vs=!!opts.vs; G.season=!!opts.season; G.manual=!!opts.manual;
+  G.vs=!!opts.vs; if(G.vs) G.streakAt=-1; G.season=!!opts.season; G.manual=!!opts.manual;
   G.hum=G.vs?[true,true]:[G.human===0,G.human===1];
   G.pl=batSecond?[1,0]:[0,1];   // 2-player: which player runs each side (P1 picked first in the menu)
   G.arm=[0,1].map(()=>({i:0,pc:0,load:0,stam:20+innings*8}));
@@ -1265,8 +1240,9 @@ function updatePitch(dt){
     if(P.locX===undefined&&P.t>=P.T){ const o=P.t-P.T; P.locX=P.ballX-P.vx*o+.5*P.ax*o*o; }
     if(hBat){
       moveBatter(dt);
-      if(!P.swing&&took('a')){P.swing={t:P.t,bunt:false}; P.swingT=0;}
-      if(!P.swing&&took('b')){P.swing={t:P.t,bunt:true}; P.swingT=-1;}
+      const lag=G.vs&&G.pl[G.half]===1?Math.min(.25,NET.rtt+.02):0;
+      if(!P.swing&&took('a')){P.swing={t:Math.max(0,P.t-lag),bunt:false}; P.swingT=lag;}
+      if(!P.swing&&took('b')){P.swing={t:Math.max(0,P.t-lag),bunt:true}; P.swingT=-1;}
     } else {
       P.off+=clamp(P.cpuOff-P.off,-3*dt,3*dt);
       if(P.cpuSwingAt!==null&&!P.swing&&P.t>=P.cpuSwingAt){P.swing={t:P.t,bunt:P.cpuBunt}; P.swingT=P.cpuBunt?-1:0;}
@@ -1333,7 +1309,7 @@ function startField(c){
   const tr=simTraj(c.ev*1.467,c.la*Math.PI/180,c.spray*Math.PI/180);
   const fair=tr.hr||tr.gr?true:judgeFair(tr);
   const fl=POS0.map((p,i)=>({x:p[0],y:p[1],tx:p[0],ty:p[1],spd:FSPD[i]*(humanBatting()?G.lv.fieldSpd:1),mv:false}));
-  F={t:0,tr,fair,foul:!fair,hr:tr.hr,gr:tr.gr,la:c.la,bunt:c.bunt,fl,ball:{st:'batted',x:0,y:0,z:3},runners:[],outsPlay:0,runsPlay:0,
+  F={uid:(Math.random()*1e9)|0,t:0,tr,fair,foul:!fair,hr:tr.hr,gr:tr.gr,la:c.la,bunt:c.bunt,fl,ball:{st:'batted',x:0,y:0,z:3},runners:[],outsPlay:0,runsPlay:0,
      endT:0,cool:.2,caught:false,cover:{},catcher:-1,catchT:0,catchPt:null,air:false,over:false,pops:[]};
   G.phase='field'; camUpdate(0,true);
   if(!F.hr&&!F.gr){
@@ -1706,8 +1682,7 @@ function drawPitch(){
     tiny('NEXT',50,96,C.dim); txt(nx.name,74,94,C.yellow);
     tiny('VEL',74,106,C.dim); for(let i=0;i<5;i++){ ctx.fillStyle=i<Math.round((nx.velo-.64)/.06)?C.yellow:'#2e2838'; ctx.fillRect(90+i*5,106,4,4); }
     tiny('CTL',122,106,C.dim); for(let i=0;i<5;i++){ ctx.fillStyle=i<Math.round((nx.ctrl-.4)/.096)?C.yellow:'#2e2838'; ctx.fillRect(138+i*5,106,4,4); }
-    txt(G.vs&&!kbMode?'TAP BRING IN OR BACK':kbMode?'X BRING IN   Z BACK':'A BRING IN   B BACK',128,118,C.text,'center'); }
-  drawTouchPitch();
+    txt(kbMode?'X BRING IN   Z BACK':'A BRING IN   B BACK',128,118,C.text,'center'); }
   if(G.fb&&G.fb.t>0&&P.state==='after'){ ctx.fillStyle='rgba(8,7,14,.75)'; ctx.fillRect(0,86,W,13); txt(G.fb.text,128,89,G.fb.col,'center'); }
   if(P.steal&&P.state!=='after'&&(performance.now()/180|0)%2) txt(P.steal.who.length>1?'DOUBLE STEAL!':'RUNNER GOING!',128,26,C.yellow,'center');
   if(P.msgT>0&&P.msg){ const big=P.msg.length<=7,a=Math.min(1,(1-P.msgT)/.12+.2);
@@ -1818,8 +1793,8 @@ function drawOver(){
     for(let i=0;i<cols;i++){ const v=G.line[s][start+i-1]; txt(v===undefined?(s===1&&start+i===n&&G.score[1]>G.score[0]?'X':' '):String(Math.min(9,v)),x0+i*cw+2,y); }
     txt(String(G.score[s]),x0+cols*cw+14,y,C.yellow,'right'); txt(String(G.hits[s]),x0+cols*cw+38,y,C.dim,'right'); });
   const w=G.score[0]>G.score[1]?0:1; let msg=G.teams[w].name+' WIN';
-  if(G.vs) msg='P'+(G.pl[w]+1)+' WINS!'; else if(G.human>=0) msg=G.human===w?'YOU WIN!':'CPU WINS';
-  const won=G.vs||G.human===w;
+  if(G.vs) msg=G.pl[w]===NET.me?'YOU WIN!':'P'+(G.pl[w]+1)+' WINS'; else if(G.human>=0) msg=G.human===w?'YOU WIN!':'CPU WINS';
+  const won=G.vs?G.pl[w]===NET.me:G.human===w;
   bigText(msg,128,126,msg.length>12?8:16,won?'#fffbe8':'#e8e2f0',won?'#f4c84a':'#9c95ac');
   if(won) txt(G.teams[w].name,128,150,C.dim,'center');
   if(G.season&&SEA) txt('SEASON '+SEA.w+'-'+SEA.l+'  ·  GAME '+Math.min(SEA.g,SEA.sched.length)+'/'+SEA.sched.length,128,184,C.yellow,'center');
@@ -1851,10 +1826,10 @@ function drawBox(s){
 const seaLocked=()=>MENU.mode===3&&SEA&&SEA.g<SEA.sched.length&&MENU.sea===0;
 function menuRows(){
   const m=MENU.mode,AT=allTeams(),lk=seaLocked();
-  const R={mode:['MODE',MODES[m]],lvl:['LEVEL',LVL[lk?SEA.lvl:MENU.lvl].name],you:[m===2?'P1':'YOU',lk?(AT[seaIdx(SEA.teams[0])]||'?'):(AT[MENU.you]||'+ NEW TEAM')],
-    cpu:[m===1?'PITCHER':m===2?'P2':'CPU',AT[MENU.cpu]],inn:['INNINGS',INN[lk?SEA.inn:MENU.inn]],bat:[m===2?'P1 BATS':'YOU BAT',MENU.bat?'2ND (HOME)':'1ST (AWAY)'],
-    fld:['FIELDING',MENU.fld?'MANUAL':'AUTO'],sea:['SEASON',SEA&&SEA.g<SEA.sched.length?(MENU.sea?'START NEW':'CONTINUE '+(SEA.g+1)+'/'+SEA.sched.length):'NEW']};
-  const keys=m===0?['mode','lvl','you','cpu','inn','bat','fld']:m===1?['mode','lvl','you','cpu']:m===2?['mode','you','cpu','inn','bat','fld']:['mode','sea','lvl','you','inn','fld'];
+  const R={mode:['MODE',MODES[m]],lvl:['LEVEL',LVL[lk?SEA.lvl:MENU.lvl].name],you:['YOU',lk?(AT[seaIdx(SEA.teams[0])]||'?'):(AT[MENU.you]||'+ NEW TEAM')],
+    cpu:[m===1?'PITCHER':m===2?'P2':'CPU',AT[MENU.cpu]],inn:['INNINGS',INN[lk?SEA.inn:MENU.inn]],bat:['YOU BAT',MENU.bat?'2ND (HOME)':'1ST (AWAY)'],
+    fld:['FIELDING',MENU.fld?'MANUAL':'AUTO'],net:['ONLINE',MENU.net?'JOIN A GAME':'HOST A GAME'],sea:['SEASON',SEA&&SEA.g<SEA.sched.length?(MENU.sea?'START NEW':'CONTINUE '+(SEA.g+1)+'/'+SEA.sched.length):'NEW']};
+  const keys=m===0?['mode','lvl','you','cpu','inn','bat','fld']:m===1?['mode','lvl','you','cpu']:m===2?(MENU.net?['mode','net','you']:['mode','net','you','inn','bat','fld']):['mode','sea','lvl','you','inn','fld'];
   return keys.map(k=>[k,...R[k]]);
 }
 function updateTitle(dt){
@@ -1876,6 +1851,7 @@ function updateTitle(dt){
     if(key==='bat') MENU.bat=1-MENU.bat;
     if(key==='fld') MENU.fld=1-MENU.fld;
     if(key==='sea') MENU.sea=1-MENU.sea;
+    if(key==='net'){ MENU.net=1-MENU.net; MENU.row=Math.min(MENU.row,menuRows().length-1); }
     saveSettings();
   }
   const L=allTeams(),you=L[MENU.you];
@@ -1883,9 +1859,142 @@ function updateTitle(dt){
   if(!you&&!locked&&(took('start')||took('a'))){ SFX.blip(); openBuilder(null); return; }
   if(took('start')||took('a')){ SFX.score(); saveSettings();
     if(MENU.mode===3){ if(!locked) newSeason(); toSeason(); return; }
+    if(MENU.mode===2){ if(MENU.net){ netReset(); LOBBY.pos=0; mode='lobby'; } else hostRoom(); return; }
     newGame(MENU.you,MENU.cpu,INN[MENU.inn],MENU.bat===1,false,{lv:MENU.lvl,derby:MENU.mode===1,vs:MENU.mode===2,manual:MENU.fld===1}); return; }
   if(titleIdle>14){ titleIdle=0; const a=(Math.random()*4)|0; let b=(a+1+((Math.random()*3)|0))%4; newGame(a,b,3,true,true); }
 }
+/* ---------------- online 2-player ---------------- */
+// The host's device runs the whole game. The guest's device sends its button presses
+// and draws the snapshots the host streams back ~30 times a second.
+const NET={host:false,guest:false,live:false,conn:null,peer:null,code:'',st:'',rtt:.1,oppTeam:null,me:0,snapT:0,sfxQ:[],lastTr:-1,err:''};
+const PEERJS=['https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js','https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js'];
+function loadPeer(){
+  if(window.Peer) return Promise.resolve();
+  return PEERJS.reduce((p,url)=>p.catch(()=>new Promise((ok,bad)=>{ const sc=document.createElement('script'); sc.src=url; sc.onload=ok; sc.onerror=bad; document.head.appendChild(sc); })),Promise.reject());
+}
+function peerOpts(){   // ?peer=host:port points at a self-hosted PeerJS server (used for testing)
+  const m=location.search.match(/[?&]peer=([^&]+)/); if(!m) return {debug:0};
+  const [host,port]=decodeURIComponent(m[1]).split(':'); return {host,port:+port||9000,path:'/',secure:location.protocol==='https:',debug:0};
+}
+const roomId=c=>'diamond88-'+c.toLowerCase();
+function myTeamMsg(){ const t=allTeams()[MENU.you]; return t.custom?{code:teamCode(t.saved)}:{builtin:t.id}; }
+function teamFromMsg(m){ if(m.builtin) return TEAMS.find(t=>t.id===m.builtin)||TEAMS[1];
+  const v=m.code&&teamFromCode(m.code); if(!v) return TEAMS[1]; v.id='net'; return fromSaved(v); }
+function netReset(msg){
+  try{ NET.conn&&NET.conn.close(); }catch(_){} try{ NET.peer&&NET.peer.destroy(); }catch(_){}
+  Object.assign(NET,{host:false,guest:false,live:false,conn:null,peer:null,code:'',st:'',oppTeam:null,me:0,err:msg||''});
+}
+function netSend(o){ try{ if(NET.conn&&NET.conn.open) NET.conn.send(o); }catch(_){} }
+function netKey(k,v){ netSend({t:'k',k,v}); }
+function hostRoom(){
+  netReset(); NET.host=true; NET.me=0; NET.code=Array.from({length:4},()=>LETTERS[(Math.random()*26)|0]).join(''); NET.st='STARTING...'; mode='lobby';
+  loadPeer().then(()=>{
+    const peer=NET.peer=new Peer(roomId(NET.code),peerOpts());
+    peer.on('open',()=>{ NET.st='WAITING FOR PLAYER 2'; });
+    peer.on('error',e=>{ if(e.type==='unavailable-id'){ netReset(); hostRoom(); } else { NET.st=''; NET.err='NETWORK ERROR ('+e.type+')'; } });
+    peer.on('connection',c=>{ if(NET.conn&&NET.conn.open){ c.close(); return; } NET.conn=c; c.on('open',()=>{ NET.st='CONNECTED'; }); netWire(c); });
+  }).catch(()=>{ NET.err='COULD NOT LOAD ONLINE PLAY'; });
+}
+function joinRoom(code){
+  netReset(); NET.guest=true; NET.me=1; NET.code=code; NET.st='CONNECTING...'; mode='lobby';
+  loadPeer().then(()=>{
+    const peer=NET.peer=new Peer(undefined,peerOpts());
+    peer.on('open',()=>{ const c=NET.conn=peer.connect(roomId(code),{reliable:true,serialization:'json'}); netWire(c);
+      c.on('open',()=>{ NET.st='CONNECTED. WAITING FOR HOST'; netSend({t:'hello',team:myTeamMsg()}); });
+      setTimeout(()=>{ if(NET.guest&&!(NET.conn&&NET.conn.open)) { NET.st=''; NET.err='NO GAME WITH CODE '+code; } },9000); });
+    peer.on('error',e=>{ NET.st=''; NET.err=e.type==='peer-unavailable'?'NO GAME WITH CODE '+code:'NETWORK ERROR ('+e.type+')'; });
+  }).catch(()=>{ NET.err='COULD NOT LOAD ONLINE PLAY'; });
+}
+function netWire(c){
+  c.on('data',m=>netMsg(m));
+  c.on('close',netLost);
+}
+// a closed tab doesn't always close the data channel, so a silent connection counts as gone too
+function netLost(){
+  if(!NET.host&&!NET.guest) return;
+  const was=NET.live,host=NET.host; netReset('PLAYER '+(host?2:1)+' LEFT');
+  if(was||mode==='lobby'){ G=null; F=null; P=null; paused=false; stopMusic(); mode='lobby'; }
+}
+function netMsg(m){
+  if(!m||typeof m!=='object') return;
+  NET.seen=performance.now();
+  if(NET.host){
+    if(m.t==='hello'){ NET.oppTeam=teamFromMsg(m.team); NET.st='READY'; SFX.score(); }
+    else if(m.t==='k'&&NET.live) setKey(m.k,m.v,1);
+    else if(m.t==='pong') NET.rtt=NET.rtt*.7+(performance.now()-m.ts)/1000*.3;
+  } else if(NET.guest){
+    if(m.t==='s') netApply(m);
+    else if(m.t==='ping') netSend({t:'pong',ts:m.ts});
+    else if(m.t==='lobby'){ NET.live=false; G=null; F=null; P=null; stopMusic(); mode='lobby'; NET.st='CONNECTED. WAITING FOR HOST'; }
+  }
+}
+function netStart(){
+  NET.live=true; clearKeys();
+  newGame(MENU.you,NET.oppTeam,INN[MENU.inn],MENU.bat===1,false,{vs:true,manual:MENU.fld===1});
+}
+// --- host: stream the game
+const SNAP_SKIP=new Set(['teams']);
+function netSnap(){
+  const g={}; for(const k in G) if(!SNAP_SKIP.has(k)) g[k]=G[k];
+  const f=F?Object.assign({},F,{tr:undefined}):null;
+  const msg={t:'s',mode,paused,G:g,P,F:f,CAM:{x:CAM.x,y:CAM.y},FX,shakeT,shakeA,flashT,sfx:NET.sfxQ.splice(0)};
+  if(!NET.teamsSent||NET.snapN%30===0){ msg.teams=G.teams; NET.teamsSent=1; }   // lineups/pitchers change rarely
+  if(F&&(F.uid!==NET.lastTr||NET.snapN%30===0)){ msg.tr=F.tr; NET.lastTr=F.uid; }
+  NET.snapN=(NET.snapN||0)+1;
+  netSend(msg);
+}
+// --- guest: draw what the host sends
+function netApply(m){
+  if(!NET.live){ NET.live=true; clearKeys(); stopMusic(); }
+  if(m.teams) NET.teams=m.teams;
+  if(m.tr) NET.tr=m.tr;
+  G=Object.assign(m.G,{teams:NET.teams||[]}); P=m.P; F=m.F?Object.assign(m.F,{tr:NET.tr||{pts:[]}}):null;
+  mode=m.mode==='play'||m.mode==='over'?m.mode:'lobby'; paused=m.paused;
+  CAM.x=m.CAM.x; CAM.y=m.CAM.y; FX=m.FX||[]; shakeT=m.shakeT; shakeA=m.shakeA; flashT=m.flashT;
+  for(const e of m.sfx||[]){ if(e[0]==='song') playSong(e[1],e[2]); else if(e[0]==='stop') stopMusic(); else if(SFX[e[0]]) SFX[e[0]].__raw(); }
+}
+// the host records every sound so the guest hears it too
+for(const k of Object.keys(SFX)){ const f=SFX[k]; SFX[k]=(...a)=>{ if(NET.host&&NET.live) NET.sfxQ.push([k]); return f(...a); }; SFX[k].__raw=f; }
+{ const ps=playSong,sm=stopMusic;
+  playSong=(n,l)=>{ if(NET.host&&NET.live) NET.sfxQ.push(['song',n,l]); return ps(n,l); };
+  stopMusic=()=>{ if(NET.host&&NET.live) NET.sfxQ.push(['stop']); return sm(); }; }
+
+// --- lobby screen (both devices)
+const LOBBY={code:[0,0,0,0],pos:0};
+function updateLobby(){
+  if(NET.host&&NET.st==='READY'&&(took('start')||took('a'))){ SFX.score(); netStart(); return; }
+  if(!NET.host&&!NET.guest&&!NET.err){   // entering a code to join
+    const e=LOBBY;
+    if(took('up')){ e.code[e.pos]=(e.code[e.pos]+1)%26; SFX.blip(); } if(took('down')){ e.code[e.pos]=(e.code[e.pos]+25)%26; SFX.blip(); }
+    if(took('left')){ e.pos=Math.max(0,e.pos-1); SFX.blip(); } if(took('right')){ e.pos=Math.min(3,e.pos+1); SFX.blip(); }
+    if(took('a')){ if(e.pos<3){ e.pos++; SFX.blip(); } else joinRoom(e.code.map(i=>LETTERS[i]).join('')); }
+    if(took('start')) joinRoom(e.code.map(i=>LETTERS[i]).join(''));
+  }
+  if(took('b')){ SFX.blip(); netReset(); toTitle(); }
+}
+function drawLobby(){
+  ctx.drawImage(bgPitch,0,0,W,H); ctx.fillStyle='rgba(6,5,12,.8)'; ctx.fillRect(0,0,W,H);
+  bigText('2 PLAYER',128,14,16,'#fff6d0','#f4b13a'); tiny('ONLINE · EACH PLAYER ON THEIR OWN DEVICE',128,36,C.dim,'center');
+  panel(20,50,216,130); const fl=(performance.now()/250|0)%2;
+  if(NET.err){ txt(NET.err,128,96,C.red,'center'); txt(kbMode?'Z BACK':'B BACK',128,150,C.text,'center'); return; }
+  if(NET.host){
+    tiny('YOUR GAME CODE',128,60,C.dim,'center'); bigText(NET.code,128,72,24,'#fffbe8','#f4c84a','#7a2a14');
+    tiny('YOUR FRIEND PICKS 2 PLAYER, JOIN, AND ENTERS IT',128,104,C.dim,'center');
+    if(NET.oppTeam){ const t=NET.oppTeam; teamChip(t,40,123.5); txt('P2: '+t.name,52,124,C.text);
+      if(fl) txt('PRESS START TO PLAY',128,152,C.yellow,'center'); }
+    else txt(NET.st||'',128,130,fl?C.text:C.dim,'center');
+  } else if(NET.guest){
+    tiny('GAME CODE',128,60,C.dim,'center'); bigText(NET.code,128,72,24,'#fffbe8','#f4c84a','#7a2a14');
+    txt(NET.st||'',128,124,fl?C.text:C.dim,'center');
+  } else {
+    tiny("ENTER YOUR FRIEND'S GAME CODE",128,62,C.dim,'center');
+    LOBBY.code.forEach((c,i)=>{ const x=86+i*24,sel=i===LOBBY.pos; bigText(LETTERS[c],x+6,84,16,sel&&fl?'#ffffff':'#fff6d0',sel?'#e2483b':'#f4b13a'); if(sel){ ctx.fillStyle=C.yellow; ctx.fillRect(x,104,14,1.5); } });
+    tiny('UP/DOWN LETTER   LEFT/RIGHT MOVE   '+(kbMode?'X':'A')+' NEXT',128,122,C.dim,'center');
+    const t=allTeams()[MENU.you]; if(t){ teamChip(t,40,145.5); txt('YOU: '+t.name,52,146,C.text); }
+  }
+  tiny(kbMode?'Z  LEAVE':'B  LEAVE',128,200,C.dim,'center');
+}
+
 /* ---------------- season ---------------- */
 let SEA=store.get('season',null);
 const seaIdx=id=>allTeams().findIndex(t=>t.id===id);
@@ -2091,11 +2200,14 @@ tbEl.addEventListener('click',e=>{
     saveSettings(); SFX.score(); closeBuilder(); return; }
   renderTB();
 });
-function toTitle(){ stopMusic(); ST=null; mode='title'; G=null; F=null; P=null; titleIdle=0; paused=false; }
+function toTitle(){
+  if(NET.host&&NET.live){ NET.live=false; netSend({t:'lobby'}); stopMusic(); G=null; F=null; P=null; paused=false; mode='lobby'; NET.st='READY'; return; } stopMusic(); ST=null; mode='title'; G=null; F=null; P=null; titleIdle=0; paused=false; }
 function update(dt){
   routeInput();
   if(took('select')){ setMuted(!muted); if(!muted){ audioInit(); SFX.score(); } saveSettings(); }
   if(mode==='build'){ clearPressed(); return; }
+  if(NET.guest&&NET.live){ musicTick(); clearPressed(); return; }   // the host runs the game
+  if(mode==='lobby'){ updateLobby(); musicTick(); clearPressed(); return; }
   if(mode==='title') updateTitle(dt);
   else if(mode==='season'){ if(!SEA) toTitle(); else updateSeason(); }
   else if(mode==='play'){
@@ -2128,13 +2240,14 @@ function draw(){
   ctx.fillStyle='#000'; ctx.fillRect(-6,-6,W+12,H+12);
   if(mode==='title'||mode==='build') drawTitle();
   else if(mode==='season') drawSeason();
+  else if(mode==='lobby') drawLobby();
   else if(mode==='over') drawOver();
   else { if(G.phase==='field'&&F) drawField(); else if(G.phase==='streak'&&ST) drawStreak(); else drawPitch(); drawHUD(); }
   drawFXScreen();
   if(mode==='play'){
     if(G.banner) drawBanner();
     if(paused){ ctx.fillStyle='rgba(8,7,14,.75)'; ctx.fillRect(0,94,W,46); bigText('PAUSED',128,100,16,'#fff6d0','#f4b13a');
-      txt(kbMode?'ENTER RESUME   '+(G.vs?'F':'Z')+' QUIT':'START RESUME   B QUIT',128,124,C.text,'center'); }
+      txt(kbMode?'ENTER RESUME   Z QUIT':'START RESUME   B QUIT',128,124,C.text,'center'); }
   }
   if(flashT>0){ ctx.fillStyle='rgba(255,255,255,'+(flashT/.1*.45)+')'; ctx.fillRect(0,0,W,H); }
 }
@@ -2144,16 +2257,19 @@ function hint(){
   let h='';
   if(padToast>0) h='Controller connected. A swing/pitch · B bunt · START pause · SELECT sound';
   else if(mode==='build') h='Type a team name and tap GENERATE, or build it player by player.';
+  else if(mode==='lobby') h=NET.host?(NET.oppTeam?`${L.S} to play · ${L.B} leave`:'Send your friend the game code · '+L.B+' to leave'):NET.guest?`Waiting for the host to start · ${L.B} leave`:`Enter the code from your friend's screen · ${L.B} back`;
   else if(mode==='season') h=`${L.A} play the next game · ${L.lr} standings and stats · ${L.B} menu`;
   else if(mode==='title'){ const yt=allTeams()[MENU.you],rk=(menuRows()[MENU.row]||[])[0];
-    h=rk==='mode'?(MENU.mode===2?'2 PLAYER: on a phone the batter uses the controller and the pitcher taps the screen. On a laptop P1 = WASD + G/F, P2 = arrows + / and .':MENU.mode===3?'SEASON: 9 games against 3 teams, with standings and season stats.':`${L.lr} change mode · ${L.S} to play`)
+    h=rk==='mode'?(MENU.mode===2?'2 PLAYER: online, each player on their own phone or laptop. One hosts, the other joins with the code.':MENU.mode===3?'SEASON: 9 games against 3 teams, with standings and season stats.':`${L.lr} change mode · ${L.S} to play`)
       :rk==='fld'?'MANUAL: steer the fielder with the d-pad, then direction + A to throw (▶ 1st ▲ 2nd ◀ 3rd ▼ home).'
       :rk==='you'&&!seaLocked()?(!yt?`${L.A} to build a new team`:yt.custom?`${L.lr} pick a team · ${L.B} edit this team · ${L.S} to play`:`${L.lr} pick a team · ${L.B} build a new team · ${L.S} to play`)
       :`${L.ud} pick a row · ${L.lr} change it · ${L.S} to play`; }
   else if(mode==='over') h=G.derby||G.demo?`${L.S} for a new game`:`${L.lr} box score · ${L.S} for a new game`;
   else if(G.demo) h=`Demo game. Press any ${kbMode?'key':'button'} for the menu.`;
   else if(paused) h=`Paused. ${L.S} to resume · ${G.vs&&kbMode?'F':L.B} to quit to the menu.`;
-  else if(G.vs&&G.phase==='pitch'&&!G.derby) h=`P${G.pl[G.half]+1} bats${kbMode?(G.pl[G.half]?' (arrows, / swing, . bunt)':' (WASD, G swing, F bunt)'):' with the controller'} · P${G.pl[1-G.half]+1} pitches${kbMode?(G.pl[1-G.half]?' (arrows + /)':' (WASD + G)'):' on the screen'}`;
+  else if(G.vs&&G.phase==='pitch'&&!G.derby&&G.pl[1-G.half]===NET.me&&!(P&&P.state==='flight')) h=`You're pitching · ${L.lr} aim · ${L.A} pitch (hold ${L.up} heater, ${L.dn} change-up) · ${L.B} bullpen`;
+  else if(G.vs&&G.phase==='pitch'&&!G.derby&&G.pl[1-G.half]===NET.me) h=`Hold ${L.l} or ${L.r} to break the pitch`;
+  else if(G.vs&&G.phase==='field'&&G.pl[G.half]!==NET.me&&!G.manual) h='Your fielders play the ball and throw on their own';
   else if(G.benchUI) h=`${L.ud} pick a pinch hitter · ${L.A} send him up · ${L.B} back`;
   else if(G.phase==='streak') h=`A streaker is loose! Press ${L.A} to skip.`;
   else if(G.derby&&G.phase==='pitch') h=`${L.lr} step in the box · ${L.A} swing. Any swing that isn't a homer is an out.`;
@@ -2171,7 +2287,9 @@ let last=performance.now(),acc=0;
 function frame(now){
   acc+=Math.min(.1,(now-last)/1000); last=now;
   pollPad();
-  while(acc>=DT){ update(DT); acc-=DT; }
+  while(acc>=DT){ update(DT); acc-=DT; if(NET.host&&NET.live&&G&&(mode==='play'||mode==='over')&&(NET.snapT=(NET.snapT+1)%2)===0) netSnap(); }
+  if(NET.host&&NET.conn&&now-(NET.pingAt||0)>1000){ NET.pingAt=now; netSend({t:'ping',ts:performance.now()}); }
+  if(NET.conn&&NET.conn.open&&NET.seen&&now-NET.seen>6000) netLost();
   draw(); hint();
   requestAnimationFrame(frame);
 }
@@ -2187,7 +2305,7 @@ async function boot(){
     const v=teamFromCode(sh[1]); if(v){ openBuilder(v); TB.id=null; TB.msg='A FRIEND SHARED THIS TEAM. TAP SAVE TEAM TO KEEP IT.'; renderTB(); } }
   requestAnimationFrame(t=>{last=t;frame(t);});
 }
-window.__dbg={step:n=>{for(let i=0;i<n;i++) update(DT);},get G(){return G;},get mode(){return mode;},get paused(){return paused;},get TB(){return TB;},openBuilder,allTeams,genSaved,get P(){return P;},get F(){return F;},start:()=>{newGame(0,1,3,true,true);}};
+window.__dbg={step:n=>{for(let i=0;i<n;i++) update(DT);},get G(){return G;},get mode(){return mode;},get paused(){return paused;},NET,get TB(){return TB;},openBuilder,allTeams,genSaved,get P(){return P;},get F(){return F;},start:()=>{newGame(0,1,3,true,true);}};
 boot();
 </script>
 

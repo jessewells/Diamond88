@@ -19,7 +19,7 @@ An 8-bit baseball game for your phone, in the style of the classic NES baseball 
 - Settings, your teams and sound on/off are saved on the device.
 - **Share a team:** in the team builder tap SHARE THIS TEAM to send a link. Opening the link loads the team on your friend's device; IMPORT A TEAM takes a pasted link or code.
 - **Bench:** every team has 3 bench players. Before the first pitch of an at-bat press B to send up a pinch hitter. The CPU pinch-hits late in close spots.
-- **2 Player:** on a phone the batter uses the on-screen controller and the pitcher taps the buttons along the bottom of the screen. On a laptop, P1 uses WASD + G (A) / F (B) and P2 uses the arrow keys + / (A) / . (B). Two gamepads work too.
+- **2 Player (online):** each player on their own phone or laptop. One picks 2 PLAYER → HOST A GAME and gets a 4-letter code; the other picks JOIN A GAME and enters it. Each brings their own team (custom teams too). The host's device runs the game and streams it to the other device over a direct WebRTC connection (PeerJS); it needs both devices online, and a few restrictive networks (some cellular carriers) may block the direct connection.
 - **Manual fielding (optional):** set FIELDING to MANUAL. Steer the fielder chasing the ball with the d-pad; once he has it, direction + A throws (right 1st, up 2nd, left 3rd, down home) and direction + B runs it to that base. Leave it alone and the fielders play it themselves.
 - **Season:** 9 games against 3 other teams with standings, season batting (AVG, HR, RBI) and pitching (IP, ERA, K), saved on the device.
 - **Derby leaderboard:** a shared top 10 once the Cloudflare Worker in `worker/` is deployed and its URL is set as `LB_URL` in `index.html` (see `worker/README.md`).

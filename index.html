@@ -1026,13 +1026,13 @@ const BAT8={
     hipB:[13,24],kB:[10,31],aB:[9,37],hipF:[16,24],kF:[20,31],aF:[22,37]},
   load:{head:[14,9],neck:[13,13],torso:[[11,13],[17,13],[16,23],[11,23]],sB:[12,15],eB:[7,16],sF:[16,15],eF:[14,20],grip:[8,11],tip:[3,2],
     hipB:[12,24],kB:[9,31],aB:[9,37],hipF:[15,24],kF:[19,29],aF:[21,35]},
-  contact:{head:[17,9],neck:[16,13],torso:[[14,13],[20,13],[19,23],[14,23]],sB:[15,15],eB:[19,20],sF:[19,15],eF:[23,17],grip:[26,19],tip:[41,18],
+  contact:{head:[17,9],neck:[16,13],torso:[[14,13],[20,13],[19,23],[14,23]],sB:[15,15],eB:[19,21.5],sF:[19,15],eF:[23,19],grip:[26,21.5],tip:[41,21.5],
     hipB:[15,24],kB:[16,31],aB:[12,36],hipF:[18,24],kF:[22,31],aF:[23,37]},
   extend:{head:[17,9],neck:[16,13],torso:[[14,13],[20,13],[19,23],[14,23]],sB:[16,15],eB:[21,16],sF:[19,15],eF:[23,14],grip:[25,12],tip:[31,4],
     hipB:[15,24],kB:[17,31],aB:[13,36],hipF:[18,24],kF:[22,31],aF:[23,37]},
   follow:{head:[17,9],neck:[16,13],torso:[[14,13],[20,13],[19,23],[14,23]],sB:[16,15],eB:[22,13],sF:[19,15],eF:[23,10],grip:[18,7],tip:[5,3],behind:1,
     hipB:[15,24],kB:[17,31],aB:[14,36],hipF:[18,24],kF:[22,31],aF:[23,37]},
-  bunt:{head:[17,9],neck:[16,13],torso:[[13,13],[19,13],[18,23],[13,23]],sB:[14,15],eB:[19,18],sF:[18,15],eF:[21,19],grip:[22,19],hB:[28,18],tip:[34,17],butt:[19,19],
+  bunt:{head:[17,9],neck:[16,13],torso:[[13,13],[19,13],[18,23],[13,23]],sB:[14,15],eB:[19,19.5],sF:[18,15],eF:[21,20.5],grip:[22,21],hB:[28,20.5],tip:[34,20.5],butt:[19,21],
     hipB:[14,24],kB:[13,31],aB:[12,37],hipF:[17,24],kF:[20,31],aF:[21,37]},
 };
 function batterParts(J,k,u=1){
@@ -2146,10 +2146,10 @@ function menuRows(){
   const m=MENU.mode,AT=allTeams(),lk=seaLocked();
   const R={mode:['MODE',MODES[m]],lvl:['LEVEL',LVL[lk?SEA.lvl:MENU.lvl].name],you:['YOU',lk?(AT[seaIdx(SEA.teams[0])]||'?'):(AT[MENU.you]||'+ NEW TEAM')],
     cpu:[m===1?'PITCHER':m===2?'P2':'CPU',AT[MENU.cpu]],inn:['INNINGS',INN[lk?SEA.inn:MENU.inn]],bat:['YOU BAT',MENU.bat?'2ND (HOME)':'1ST (AWAY)'],
-    fld:['FIELDING',MENU.fld?'MANUAL':'AUTO'],park:['PARK',PARKS[MENU.park]],time:['TIME',MENU.time?'DAY':'NIGHT'],wind:['WIND',MENU.wind?'WINDY':'CALM'],net:['ONLINE',['HOST A GAME','JOIN A GAME','FIND A MATCH'][MENU.net]],ntype:['PLAY',MENU.ntype?'HR DERBY':'GAME'],sea:['SEASON',SEA&&SEA.g<SEA.sched.length?(MENU.sea?'START NEW':'CONTINUE '+(SEA.g+1)+'/'+SEA.sched.length):'NEW']};
+    fld:['FIELDING',MENU.fld?'MANUAL':'AUTO'],park:['PARK',PARKS[MENU.park]],lb:['LEADERS',LB_URL?'VIEW TOP 10':'OFFLINE'],time:['TIME',MENU.time?'DAY':'NIGHT'],wind:['WIND',MENU.wind?'WINDY':'CALM'],net:['ONLINE',['HOST A GAME','JOIN A GAME','FIND A MATCH'][MENU.net]],ntype:['PLAY',MENU.ntype?'HR DERBY':'GAME'],sea:['SEASON',SEA&&SEA.g<SEA.sched.length?(MENU.sea?'START NEW':'CONTINUE '+(SEA.g+1)+'/'+SEA.sched.length):'NEW']};
   const V=['park','time','wind'];
   if(m===4) return [['mode',...R.mode],['ach','UNLOCKED',achCount()+' OF '+ACHS.length]];
-  const keys=m===0?['mode','lvl','you','cpu','inn','bat','fld',...V]:m===1?['mode','lvl','you','cpu',...V]:m===2?(MENU.net===1?['mode','net','you']:MENU.ntype?['mode','net','ntype','you',...V]:['mode','net','ntype','you','inn','bat','fld',...V]):['mode','sea','lvl','you','inn','fld',...V];
+  const keys=m===0?['mode','lvl','you','cpu','inn','bat','fld',...V]:m===1?['mode','lvl','you','cpu',...V,'lb']:m===2?(MENU.net===1?['mode','net','you']:MENU.ntype?['mode','net','ntype','you',...V]:['mode','net','ntype','you','inn','bat','fld',...V]):['mode','sea','lvl','you','inn','fld',...V];
   return keys.map(k=>[k,...R[k]]);
 }
 function updateTitle(dt){
@@ -2181,6 +2181,7 @@ function updateTitle(dt){
   const L=allTeams(),you=L[MENU.you];
   if(key==='you'&&!locked&&took('b')){ SFX.blip(); openBuilder(you&&you.custom?you.saved:null); return; }
   if(!you&&!locked&&MENU.mode!==4&&(took('start')||took('a'))){ SFX.blip(); openBuilder(null); return; }
+  if(key==='lb'&&(took('a')||took('start'))){ if(LB_URL){ SFX.blip(); openLbView(); } return; }
   if(MENU.mode===4&&(took('start')||took('a'))){ SFX.blip(); saveSettings(); mode='ach'; ACHV.sel=0; return; }
   if(took('start')||took('a')){ SFX.score(); saveSettings();
     if(MENU.mode===3){ if(!locked) newSeason(); toSeason(); return; }
@@ -2547,6 +2548,11 @@ function lbStart(){
     if(d.hr>0&&(top.length<10||d.hr>top[top.length-1].hr||longOk)){ const ini=(SET.ini||'AAA').padEnd(3,'A'); lb.ent={ch:[...ini].map(c=>Math.max(0,LETTERS.indexOf(c))),pos:0}; }
   }).catch(()=>{ lb.err=true; });
 }
+// the leaderboard on its own, from the title menu (HR DERBY > LEADERBOARD)
+function openLbView(){
+  G={lbview:true,derby:{hr:-1,long:-1},lb:{top:null,long:[],err:false},overPg:1}; mode='lbview';
+  Promise.all([lbCall('/top'),lbCall('/long').catch(()=>[])]).then(([top,long])=>{ if(G&&G.lbview){ G.lb.top=top; G.lb.long=long; } }).catch(()=>{ if(G&&G.lbview) G.lb.err=true; });
+}
 function lbSubmit(){
   const lb=G.lb,n=lb.ent.ch.map(i=>LETTERS[i]).join(''); lb.ent=null; lb.sending=true; SET.ini=n; saveSettings();
   lbCall('/score',{n,hr:G.derby.hr,ft:G.derby.long||0,lvl:LVL.indexOf(G.lv)}).then(top=>{ lb.top=top; lb.sending=false; lb.mine=n; G.overPg=1; SFX.score(); return lbCall('/long').then(l=>{ lb.long=l; }); })
@@ -2562,7 +2568,7 @@ function updateLbEntry(){
 function drawLb(){
   const lb=G.lb;
   if(G.overPg===2){ bigText('LONGEST HR',128,24,16,'#fff6d0','#f4b13a'); panel(36,52,184,134);
-    tiny('<  BACK    PRESS START',128,200,C.dim,'center');
+    tiny(G.lbview?'< > MOST HR / LONGEST HR    B BACK':'<  BACK    PRESS START',128,200,C.dim,'center');
     if(!lb.long||!lb.long.length){ txt('NO HOMERS YET',128,110,C.dim,'center'); return; }
     lb.long.forEach((r,i)=>{ const y=59+i*12.5,me=r.n===lb.mine&&r.ft===G.derby.long;
       txt(String(i+1).padStart(2),48,y,C.dim); txt(r.n,76,y,me?C.yellow:C.text); txt(r.ft+' FT',178,y,C.yellow,'right'); tiny(['ROOKIE','PRO','ALL-STAR'][r.lvl]||'',212,y+2,C.dim,'right'); });
@@ -2571,7 +2577,7 @@ function drawLb(){
   panel(36,52,184,134);
   if(lb.err) { txt('OFFLINE',128,110,C.dim,'center'); return; }
   if(!lb.top) { txt('LOADING...',128,110,C.dim,'center'); return; }
-  tiny('<  BACK    PRESS START',128,200,C.dim,'center');
+  tiny(G.lbview?'< > MOST HR / LONGEST HR    B BACK':'<  BACK    PRESS START',128,200,C.dim,'center');
   if(!lb.top.length) txt('NO SCORES YET',128,110,C.dim,'center');
   lb.top.forEach((r,i)=>{ const y=59+i*12.5,me=r.n===lb.mine&&r.hr===G.derby.hr;
     txt(String(i+1).padStart(2),48,y,C.dim); txt(r.n,76,y,me?C.yellow:C.text); txt(String(r.hr),150,y,C.yellow,'right'); tiny(['ROOKIE','PRO','ALL-STAR'][r.lvl]||'',208,y+2,C.dim,'right'); });
@@ -2678,6 +2684,7 @@ function update(dt){
   if(mode==='title') updateTitle(dt);
   else if(mode==='season'){ if(!SEA) toTitle(); else updateSeason(); }
   else if(mode==='ach') updateAch();
+  else if(mode==='lbview'){ if(took('left')||took('right')){ G.overPg=3-G.overPg; SFX.blip(); } if(took('b')||took('start')||took('a')){ SFX.blip(); G=null; mode='title'; titleIdle=0; } }
   else if(mode==='play'){
     if(G.demo){ if(anyTook()){ toTitle(); clearPressed(); return; } }
     else if(took('start')||ptook('start')) paused=!paused;
@@ -2710,6 +2717,7 @@ function draw(){
   if(mode==='title'||mode==='build') drawTitle();
   else if(mode==='season') drawSeason();
   else if(mode==='ach') drawAch();
+  else if(mode==='lbview'){ ctx.drawImage(bgPitch,0,0,W,H); ctx.fillStyle='rgba(6,5,12,.8)'; ctx.fillRect(0,0,W,H); drawLb(); }
   else if(mode==='lobby') drawLobby();
   else if(mode==='over') drawOver();
   else { if(G.phase==='field'&&F) drawField(); else if(G.phase==='streak'&&ST) drawStreak(); else drawPitch(); drawHUD(); }
@@ -2731,11 +2739,13 @@ function hint(){
   else if(mode==='lobby'&&NET.match&&!NET.err) h=`Matchmaking: the game starts as soon as someone joins · ${L.B} leave`;
   else if(mode==='lobby') h=NET.host?(NET.oppTeam?`${L.S} to play · ${L.B} leave`:'Send your friend the game code · '+L.B+' to leave'):NET.guest?`Waiting for the host to start · ${L.B} leave`:`Enter the code from your friend's screen · ${L.B} back`;
   else if(mode==='ach') h=`${L.ud} scroll · ${L.B} back to the menu`;
+  else if(mode==='lbview') h=`${L.lr} most homers / longest homers · ${L.B} back to the menu`;
   else if(mode==='season') h=`${L.A} play the next game · ${L.lr} standings and stats · ${L.B} menu`;
   else if(mode==='title'){ const yt=allTeams()[MENU.you],rk=(menuRows()[MENU.row]||[])[0];
     h=rk==='net'&&MENU.net===2?'FIND A MATCH: get paired with anyone else looking for a game right now.':rk==='mode'&&MENU.mode===4?`TROPHIES: ${achCount()} of ${ACHS.length} unlocked. ${L.S} to see them all.`:rk==='mode'?(MENU.mode===2?'2 PLAYER: online, each player on their own phone or laptop. One hosts, the other joins with the code.':MENU.mode===3?'SEASON: 9 games against 3 teams, with standings and season stats.':`${L.lr} change mode · ${L.S} to play`)
       :rk==='park'?'WELLS FARM: a tree-farm ballpark with The Pines coffee stand and the big red barn past the fence.'
       :rk==='time'?'DAY or NIGHT game (at night the farm trees light up).'
+      :rk==='lb'?(LB_URL?`${L.A} to see the top 10 derby scores and the longest homers`:'The leaderboard needs the game server (worker/).')
       :rk==='wind'?'WINDY: a random wind each game. Blowing out carries fly balls farther; blowing in knocks them down.'
       :rk==='fld'?'MANUAL: steer the fielder with the d-pad, then direction + A to throw (▶ 1st ▲ 2nd ◀ 3rd ▼ home).'
       :rk==='you'&&!seaLocked()?(!yt?`${L.A} to build a new team`:yt.custom?`${L.lr} pick a team · ${L.B} edit this team · ${L.S} to play`:`${L.lr} pick a team · ${L.B} build a new team · ${L.S} to play`)

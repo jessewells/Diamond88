@@ -247,11 +247,12 @@ function shareLink(v){ return location.origin+location.pathname+'#t='+teamCode(v
 let SET=store.get('settings',{});
 function saveSettings(){
   const L=allTeams(),id=i=>L[i]?L[i].id:null;
-  store.set('settings',{mode:MENU.mode,lvl:MENU.lvl,inn:MENU.inn,bat:MENU.bat,fld:MENU.fld,you:id(MENU.you),cpu:id(MENU.cpu),muted,ini:SET.ini||''});
+  store.set('settings',{mode:MENU.mode,lvl:MENU.lvl,inn:MENU.inn,bat:MENU.bat,fld:MENU.fld,park:MENU.park,time:MENU.time,wind:MENU.wind,you:id(MENU.you),cpu:id(MENU.cpu),muted,ini:SET.ini||''});
 }
 function loadSettings(){
   const L=allTeams(),ix=id=>L.findIndex(t=>t.id===id),s=SET||{};
-  for(const k of ['mode','lvl','inn','bat','fld']) if(Number.isInteger(s[k])) MENU[k]=s[k];
+  for(const k of ['mode','lvl','inn','bat','fld','park','time','wind']) if(Number.isInteger(s[k])) MENU[k]=s[k];
+  MENU.park=clamp(MENU.park,0,PARKS.length-1); MENU.time=clamp(MENU.time,0,1); MENU.wind=clamp(MENU.wind,0,1);
   MENU.fld=clamp(MENU.fld,0,1); MENU.mode=clamp(MENU.mode,0,3); MENU.lvl=clamp(MENU.lvl,0,2); MENU.inn=clamp(MENU.inn,0,2); MENU.bat=clamp(MENU.bat,0,1);
   const y=ix(s.you),c=ix(s.cpu); if(y>=0) MENU.you=y; if(c>=0&&c!==MENU.you) MENU.cpu=c;
   if(MENU.cpu===MENU.you) MENU.cpu=(MENU.you+1)%L.length;
@@ -602,9 +603,11 @@ function groundRGB(x,y,k){
   return [c[0]*l,c[1]*l,c[2]*l];
 }
 function standsRGB(x,y){
-  const out=region(x,y),ax=Math.abs(x),th=Math.atan2(ax,y)*57.29578,al=(ax+y)/1.41421,dl=(ax-y)/1.41421;
+  const out=region(x,y),ax=Math.abs(x),th=Math.atan2(ax,y)*57.29578,al=(ax+y)/1.41421,dl=(ax-y)/1.41421,WC=wallCol();
   if(out<.9) return PAL.pad;
-  if(out<8){ if(y>0&&th<=45){ if(out<1.6||out>7.2) return PAL.wall2; const seg=Math.floor((Math.atan2(x,y)*57.29578+45)/11.25); return [PAL.wall,PAL.adR,PAL.wall,PAL.adB][seg%4]; } return PAL.wall; }
+  if(out<8){ if(y>0&&th<=45){ if(out<1.6||out>7.2) return WC.plaqueRGB; const seg=Math.floor((Math.atan2(x,y)*57.29578+45)/11.25); return [WC.faceRGB,PAL.adR,WC.faceRGB,PAL.adB][seg%4]; } return WC.faceRGB; }
+  // Wells Farm: past the outfield fence it's open grass and rows of Christmas trees (drawn on top by farmDeco)
+  if(VEN.park===1&&y>0&&th<=46){ const n=hash(Math.floor(x/3),Math.floor(y/3)),c=n<.3?[66,124,58]:n<.6?[72,134,62]:[62,116,54],l=VEN.day?1:.62; return [c[0]*l,c[1]*l,c[2]*l]; }
   if(dl>54&&al>45&&al<125&&out<16) return out<6.5?PAL.dug2:PAL.dug;
   const o=out-8,row=Math.floor(o/3.2),f=o-row*3.2;
   if(f<.7) return PAL.seat2;
@@ -613,6 +616,8 @@ function standsRGB(x,y){
   return PAL.seat;
 }
 function upperRGB(lx,ly,X,Y){
+  if(VEN.park===1) return farmSkyRGB(lx,ly,X,Y);
+  if(ly<22&&VEN.day){ const t=ly/22; return [96+t*60,160+t*44,232+t*14]; }
   if(ly<22){ const t=ly/22; if(hash(X,Y)<.006) return [220,224,255]; return [10+t*14,15+t*22,42+t*40]; }
   if(ly<24) return [22,18,32];
   let top,rh;
@@ -632,6 +637,97 @@ function paint(g,w,h,fn){
   g.putImageData(img,0,0);
 }
 const tinyFont=s=>s+'px "Press Start 2P", ui-monospace, monospace';
+/* ---------------- ballparks, day/night, wind ---------------- */
+// VEN is the park being drawn: 0 Diamond Stadium, 1 Wells Farm. Backgrounds are built per park + time of day and cached.
+const PARKS=['DIAMOND STADIUM','WELLS FARM'];
+const VEN={park:0,day:0};
+const WALLS=[{face:'#1d5a3e',seam:'#164832',plaque:'#143f2b',base:'#0d2a1d'},{face:'#6b4527',seam:'#553519',plaque:'#3f2610',base:'#2a1a0c'}];
+WALLS.forEach(w=>{ w.faceRGB=hex2rgb(w.face); w.plaqueRGB=hex2rgb(w.plaque); });
+const wallCol=()=>WALLS[VEN.park];
+// farm sky over the batter's view: sky, a far treeline, then the trees and buildings farmDeco paints on top
+function farmSkyRGB(lx,ly,X,Y){
+  const hz=58+3*Math.sin(lx*.045)+2*Math.sin(lx*.13+1);
+  if(ly<hz){ const t=ly/hz;
+    if(VEN.day){ const cl=Math.sin(lx*.09+ly*.4)>.82&&ly<30&&hash(X>>3,Y>>2)<.8; return cl?[244,248,255]:[90+t*80,156+t*60,230+t*16]; }
+    if(hash(X,Y)<.006) return [220,224,255]; return [10+t*18,15+t*26,42+t*44]; }
+  const n=hash(X>>1,Y>>1); return VEN.day?(n<.5?[52,96,62]:[46,88,56]):(n<.5?[18,34,28]:[15,29,24]);
+}
+// the farm's trees and buildings, in world feet; drawn far-to-near in both views so they match
+let FARM=null;
+function farmObjs(){
+  if(FARM) return FARM; const objs=[],rr=rng(88);
+  const bld=[{k:'pines',th:-9,r:452,w:46,d:22,h:13},{k:'barn',th:11,r:470,w:52,d:34,h:20}];
+  bld.forEach(b=>{ const [x,y]=polar(b.r,b.th); objs.push({...b,x,y,dist:b.r}); });
+  for(let r0=14;r0<240;r0+=13) for(let th=-47;th<=47;th+=0){
+    const fr=fenceR(Math.min(45,Math.abs(th)))+r0+rr()*4,[x,y]=polar(fr,th);
+    th+=(9+rr()*3)/fr*57.3;
+    if(bld.some(b=>Math.abs(th-b.th)*b.r/57.3<b.w/2+12&&Math.abs(fr-b.r)<b.d/2+14)) continue;
+    if(rr()<.1) continue;
+    objs.push({k:'tree',x,y,dist:fr,h:13+rr()*7,w:7+rr()*2.5,seed:rr()*1e6|0});
+  }
+  return FARM=objs.sort((a,b)=>b.dist-a.dist);
+}
+// P3(x,y,z) -> [sx,sy,px per ft]; keep() drops objects off the canvas
+function farmDeco(g,P3,keep){
+  const LT=['#ff5a4d','#ffd84d','#5ad0ff','#8dff6a','#ff8ce0'];
+  for(const o of farmObjs()){
+    const b=P3(o.x,o.y,0); if(!keep(b)) continue;
+    if(o.k==='tree'){ const t=P3(o.x,o.y,o.h),H=b[1]-t[1],k=b[2],W=o.w*k,cx=b[0],dk=VEN.day?1:.55;
+      g.fillStyle=shade('#5a3a22',dk); g.fillRect(cx-Math.max(.5,W*.07),b[1]-H*.16,Math.max(1,W*.14),H*.16);
+      for(let j=0;j<3;j++){ const y0=b[1]-H*(.12+.25*j),hw=W/2*(1-.24*j),y1=j===2?t[1]:y0-H*.48;
+        g.fillStyle=shade('#1f5c34',dk); g.beginPath(); g.moveTo(cx-hw,y0); g.lineTo(cx,y1); g.lineTo(cx+hw,y0); g.closePath(); g.fill();
+        g.fillStyle=shade('#2f7c46',dk); g.beginPath(); g.moveTo(cx,y0); g.lineTo(cx,y1); g.lineTo(cx+hw,y0); g.closePath(); g.fill(); }
+      if(!VEN.day&&H>4){ const r=rng(o.seed); for(let i=0;i<Math.min(9,H*.6);i++){ const u=.12+r()*.8,yy=b[1]-H*u,half=W/2*(1-u)*.9;
+        g.fillStyle=LT[r()*5|0]; g.fillRect(cx+(r()*2-1)*half-.4,yy-.4,.8,.8); } }
+      continue; }
+    // buildings face home plate: front face, a gable or roof sign, windows
+    const ux=Math.sin(o.th*Math.PI/180),uy=Math.cos(o.th*Math.PI/180),tx=uy,ty=-ux,dd=o.d/2,ww=o.w/2;
+    const at=(a,c,z)=>P3(o.x+tx*a+ux*c,o.y+ty*a+uy*c,z),poly=(pts,col)=>{ g.fillStyle=col; g.beginPath(); pts.forEach((p,i)=>i?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1])); g.closePath(); g.fill(); };
+    const dk=VEN.day?1:.5,lit=VEN.day?null:'#ffd98a';
+    if(o.k==='barn'){ const roof=o.h+14;
+      poly([at(-ww,dd,o.h),at(-ww*.62,dd,o.h+9),at(-ww*.62,-dd,o.h+9),at(-ww,-dd,o.h)],shade('#4a4550',dk));
+      poly([at(ww,dd,o.h),at(ww*.62,dd,o.h+9),at(ww*.62,-dd,o.h+9),at(ww,-dd,o.h)],shade('#5a5560',dk));
+      poly([at(-ww*.62,dd,o.h+9),at(0,dd,roof),at(0,-dd,roof),at(-ww*.62,-dd,o.h+9)],shade('#5a5560',dk));
+      poly([at(ww*.62,dd,o.h+9),at(0,dd,roof),at(0,-dd,roof),at(ww*.62,-dd,o.h+9)],shade('#6a6570',dk));
+      poly([at(-ww,-dd,0),at(ww,-dd,0),at(ww,-dd,o.h),at(ww*.62,-dd,o.h+9),at(0,-dd,roof),at(-ww*.62,-dd,o.h+9),at(-ww,-dd,o.h)],shade('#a3262a',dk));
+      const tr=shade('#f2ece0',dk); g.strokeStyle=tr; g.lineWidth=Math.max(.5,b[2]*.9);
+      const ln=(a,c)=>{ g.beginPath(); g.moveTo(...a.slice(0,2)); g.lineTo(...c.slice(0,2)); g.stroke(); };
+      ln(at(-9,-dd,0),at(-9,-dd,12)); ln(at(9,-dd,0),at(9,-dd,12)); ln(at(-9,-dd,12),at(9,-dd,12)); ln(at(-9,-dd,0),at(9,-dd,12)); ln(at(9,-dd,0),at(-9,-dd,12));
+      poly([at(-4,-dd,o.h+2),at(4,-dd,o.h+2),at(4,-dd,o.h+9),at(-4,-dd,o.h+9)],lit||'#2a1a10');
+      const c=at(0,-dd,o.h-3.5); if(b[2]>.7){ g.font=tinyFont(4); g.textAlign='center'; g.textBaseline='middle'; g.fillStyle=tr; g.fillText('WELLS FARM',c[0],c[1]); } }
+    else { // The Pines coffee stand: green box, striped awning, a sign on the roof
+      poly([at(-ww,dd,o.h),at(ww,dd,o.h),at(ww,-dd,o.h),at(-ww,-dd,o.h)],shade('#2a2620',dk));
+      poly([at(-ww,-dd,0),at(ww,-dd,0),at(ww,-dd,o.h),at(-ww,-dd,o.h)],shade('#24563a',dk));
+      for(let i=0;i<8;i++){ const a0=-ww+i*o.w/8,a1=a0+o.w/8; poly([at(a0,-dd-3,o.h-4),at(a1,-dd-3,o.h-4),at(a1,-dd,o.h-1),at(a0,-dd,o.h-1)],shade(i%2?'#f3e9cf':'#7a1f2b',dk)); }
+      for(const a of [-15,-3,9]) poly([at(a,-dd,2.5),at(a+7,-dd,2.5),at(a+7,-dd,7.5),at(a,-dd,7.5)],lit||'#9ec7d6');
+      const s0=o.h+1,s1=o.h+9; poly([at(-ww+3,-dd+4,s0),at(ww-3,-dd+4,s0),at(ww-3,-dd+4,s1),at(-ww+3,-dd+4,s1)],shade('#f3e9cf',VEN.day?1:.85));
+      const c=at(0,-dd+4,(s0+s1)/2); g.font=tinyFont(4); g.textAlign='center'; g.textBaseline='middle'; g.fillStyle='#24563a'; g.fillText('THE PINES',c[0],c[1]+.3);
+    }
+  }
+}
+// wind: mph and the direction it blows toward (0 = out to center, 90 = toward right field, 180 = in from center)
+let WIND={mph:0,dir:0,vx:0,vy:0};
+function setWind(w){ const a=w.dir*Math.PI/180,v=w.mph*1.467; WIND={mph:w.mph,dir:w.dir,vx:v*Math.sin(a),vy:v*Math.cos(a)}; }
+const BG=new Map();
+function setVenue(park,day){
+  const key=park+'/'+day; let b=BG.get(key);
+  if(!b){ const o={park:VEN.park,day:VEN.day}; VEN.park=park; VEN.day=day; b={w:buildWorld(),p:buildPitchBG()}; BG.set(key,b); VEN.park=o.park; VEN.day=o.day; }
+  VEN.park=park; VEN.day=day; bgWorld=b.w; bgPitch=b.p;
+}
+function venueFromMenu(){
+  const dirs=[0,45,90,135,180,225,270,315];
+  return {park:MENU.park,day:MENU.time,mph:MENU.wind?5+(Math.random()*14|0):0,dir:dirs[Math.random()*8|0]};
+}
+function windLabel(w){ const d=((w.dir%360)+360)%360; return d<23||d>337?'OUT':d>157&&d<203?'IN':d<157?(d<68?'OUT TO RF':d<113?'L TO R':'IN FROM LF'):(d>292?'OUT TO LF':d>248?'R TO L':'IN FROM RF'); }
+function drawWind(x,y){
+  const w=G&&G.venue; if(!w||!w.mph) return;
+  ctx.fillStyle='rgba(6,5,10,.72)'; ctx.fillRect(x,y,26,24); ctx.strokeStyle='#4a4158'; ctx.lineWidth=.5; ctx.strokeRect(x+.25,y+.25,25.5,23.5);
+  tiny('WIND',x+13,y+2,C.dim,'center');
+  const a=w.dir*Math.PI/180,cx=x+13,cy=y+12.5,dx=Math.sin(a),dy=-Math.cos(a);
+  ctx.strokeStyle=C.yellow; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(cx-dx*4,cy-dy*4); ctx.lineTo(cx+dx*4,cy+dy*4); ctx.stroke();
+  ctx.fillStyle=C.yellow; ctx.beginPath(); ctx.moveTo(cx+dx*5.5,cy+dy*5.5); ctx.lineTo(cx+dx*2.5-dy*2.5,cy+dy*2.5+dx*2.5); ctx.lineTo(cx+dx*2.5+dy*2.5,cy+dy*2.5-dx*2.5); ctx.fill();
+  tiny(w.mph+' MPH',x+13,y+18,C.text,'center');
+}
 function buildWorld(){
   const [c,g]=mk(WW,WH);
   paint(g,WW,WH,(X,Y)=>{ const x=((X+.5)/RS-WX0)/FK,y=(WY0-(Y+.5)/RS)/(FK*FT); return groundRGB(x,y,1.6)||standsRGB(x,y); });
@@ -640,14 +736,15 @@ function buildWorld(){
     for(let a=a0;a<=a1+1e-6;a+=.5){ const p=fw(...polar(fenceR(a),a),0); a===a0?g.moveTo(p[0],p[1]):g.lineTo(p[0],p[1]); }
     for(let a=a1;a>=a0-1e-6;a-=.5){ const p=fw(...polar(fenceR(a),a),WALL_H); g.lineTo(p[0],p[1]); }
     g.closePath(); g.fill(); };
-  // same wall as the batter's view: green padding with seams, the same ads at the same angles, 400 in center
-  face(-45,45,'#1d5a3e');
-  g.strokeStyle='#164832'; g.lineWidth=.5;
+  if(VEN.park===1) farmDeco(g,(x,y,z)=>{ const p=fw(x,y,z); return [p[0],p[1],FK]; },p=>p[1]>-30&&p[0]>-30&&p[0]<WW+30);
+  // same wall as the batter's view: padding with seams, the same ads at the same angles, 400 in center
+  const WC=wallCol(); face(-45,45,WC.face);
+  g.strokeStyle=WC.seam; g.lineWidth=.5;
   for(let a=-45;a<=45;a+=2.5){ const p=fw(...polar(fenceR(a),a),0),q=fw(...polar(fenceR(a),a),WALL_H); g.beginPath(); g.moveTo(p[0],p[1]); g.lineTo(q[0],q[1]); g.stroke(); }
   wallDress(g,(a,z)=>fw(...polar(fenceR(a),a),z),WALL_H);
   g.strokeStyle='#f4c84a'; g.lineWidth=1; g.beginPath();
   for(let a=-45;a<=45;a+=.5){ const p=fw(...polar(fenceR(a),a),WALL_H); a===-45?g.moveTo(p[0],p[1]):g.lineTo(p[0],p[1]); } g.stroke();
-  g.strokeStyle='#0d2a1d'; g.beginPath();
+  g.strokeStyle=WC.base; g.beginPath();
   for(let a=-45;a<=45;a+=.5){ const p=fw(...polar(fenceR(a),a),0); a===-45?g.moveTo(p[0],p[1]):g.lineTo(p[0],p[1]); } g.stroke();
   [-45,45].forEach(a=>{ const p=fw(...polar(fenceR(45)+1,a)); g.fillStyle='#f4c84a'; g.fillRect(p[0]-.5,p[1]-26,1,26); g.fillRect(p[0]-1.5,p[1]-26,3,1); });
   return c;
@@ -672,7 +769,7 @@ function wallDress(g,P,Hh){
     let k=1,best=1e9; for(let i=1;i<w.length;i++){ const d=Math.abs(w.slice(0,i).join(' ').length-w.slice(i).join(' ').length); if(d<best){ best=d; k=i; } }
     arcText(w.slice(0,k).join(' '),am,Hh*.64); arcText(w.slice(k).join(' '),am,Hh*.36); });
   g.fillStyle='#f6f2e6'; arcText('400',0,Hh/2);
-  [[-38,'330'],[-18.2,'375'],[18,'375'],[38,'330']].forEach(([a,s])=>{ band(a-2.1,a+2.1,Hh*.2,Hh*.8,'#143f2b'); g.fillStyle='#f4e9c8'; arcText(s,a,Hh/2); });
+  [[-38,'330'],[-18.2,'375'],[18,'375'],[38,'330']].forEach(([a,s])=>{ band(a-2.1,a+2.1,Hh*.2,Hh*.8,wallCol().plaque); g.fillStyle='#f4e9c8'; arcText(s,a,Hh/2); });
 }
 function buildPitchBG(){
   const [c,g]=mk(W,H),SS=[[-.25,-.25],[.25,-.25],[-.25,.25],[.25,.25]];
@@ -684,23 +781,27 @@ function buildPitchBG(){
       const cc=groundRGB(x,d,1)||standsRGB(x,d); r+=cc[0]; gg+=cc[1]; b+=cc[2]; }
     return [r/4,gg/4,b/4];
   });
-  // light towers with glow
+  if(VEN.park===1) farmDeco(g,(x,y,z)=>pp(x,y,z),p=>p[0]>-60&&p[0]<W+60);
+  // light towers (lit, with glow, at night)
   [14,242].forEach(x=>{ const y=10;
-    g.fillStyle='#2c2736'; g.fillRect(x-1,y+8,2,70);
+    g.fillStyle=VEN.park===1?'#5a4030':'#2c2736'; g.fillRect(x-1,y+8,2,70);
     g.fillStyle='#3a3446'; g.fillRect(x-9,y-1,18,10);
-    for(let i=0;i<4;i++) for(let j=0;j<2;j++){ g.fillStyle='#fff3c0'; g.fillRect(x-8+i*4.4,y+j*4.5,3.4,3.5); }
+    for(let i=0;i<4;i++) for(let j=0;j<2;j++){ g.fillStyle=VEN.day?'#9a97a6':'#fff3c0'; g.fillRect(x-8+i*4.4,y+j*4.5,3.4,3.5); }
+    if(VEN.day) return;
     g.globalCompositeOperation='lighter';
     const gr=g.createRadialGradient(x,y+4,1,x,y+4,46); gr.addColorStop(0,'rgba(255,240,190,.45)'); gr.addColorStop(1,'rgba(255,240,190,0)');
     g.fillStyle=gr; g.fillRect(x-46,y-42,92,92); g.globalCompositeOperation='source-over'; });
   // outfield wall with padding seams and ads
   const P=(a,h)=>{const r=Math.abs(a)>45?fenceR(45):fenceR(a),[x,y]=polar(r,a),q=pp(x,y,h);return [q[0],q[1]];};
   const top=[],bot=[]; for(let a=-70;a<=70;a+=1){top.push(P(a,10)); bot.push(P(a,0));}
-  g.fillStyle='#1d5a3e'; polyPath(g,[...top,...bot.slice().reverse()]); g.fill();
-  g.strokeStyle='#164832'; g.lineWidth=.5; for(let a=-70;a<=70;a+=2.5){ g.beginPath(); g.moveTo(...P(a,0)); g.lineTo(...P(a,10)); g.stroke(); }
+  const WC=wallCol(); g.fillStyle=WC.face; polyPath(g,[...top,...bot.slice().reverse()]); g.fill();
+  g.strokeStyle=WC.seam; g.lineWidth=.5; for(let a=-70;a<=70;a+=2.5){ g.beginPath(); g.moveTo(...P(a,0)); g.lineTo(...P(a,10)); g.stroke(); }
   wallDress(g,P,10);
   g.strokeStyle='#f4c84a'; g.lineWidth=.8; g.beginPath(); top.forEach((p,i)=>i?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1])); g.stroke();
-  // night haze from the lights
-  const hz=g.createRadialGradient(128,140,10,128,140,190); hz.addColorStop(0,'rgba(255,248,220,.07)'); hz.addColorStop(1,'rgba(0,0,20,.18)');
+  // night haze from the lights; daytime gets a little warm sun instead
+  const hz=g.createRadialGradient(128,140,10,128,140,190);
+  if(VEN.day){ hz.addColorStop(0,'rgba(255,244,210,.06)'); hz.addColorStop(1,'rgba(255,240,200,0)'); }
+  else { hz.addColorStop(0,'rgba(255,248,220,.07)'); hz.addColorStop(1,'rgba(0,0,20,.18)'); }
   g.fillStyle=hz; g.fillRect(0,0,W,H);
   return c;
 }
@@ -1092,7 +1193,7 @@ function camUpdate(dt,now){
 
 /* ---------------- game state ---------------- */
 let mode='title',G=null,P=null,F=null,paused=false,titleIdle=0,overT=0;
-const MENU={row:0,you:0,cpu:1,inn:0,bat:1,lvl:1,mode:0,fld:0,sea:0,net:0,ntype:0};
+const MENU={row:0,you:0,cpu:1,inn:0,bat:1,lvl:1,mode:0,fld:0,sea:0,net:0,ntype:0,park:0,time:0,wind:0};
 const MODES=['GAME','HR DERBY','2 PLAYER','SEASON'];
 // Cloudflare Worker API (worker/): the 2-player relay and the derby leaderboard. On our own domain it lives at /api;
 // ?api=<url> points elsewhere for testing. If it isn't deployed, 2 player falls back to direct WebRTC and the leaderboard stays off.
@@ -1136,11 +1237,13 @@ function newGame(you,cpu,innings,batSecond,demo,opts={}){
   // 2-player derby: players alternate turns of 5 outs, 2 rounds; P1 (side 1) leads off; ties go to 3-out swing-offs
   if(G.derby&&G.vs){ const t=G.derby.two={hr:[0,0],turn:0,order:[1,0],round:1,rounds:2,per:5,swingoff:0};
     G.derby.max=t.per; G.hum=[false,true]; }
+  const v=opts.venue||(demo?{park:VEN.park,day:VEN.day,mph:0,dir:0}:venueFromMenu());
+  G.venue=v; setVenue(v.park,v.day); setWind(v);
   mode='play'; paused=false; F=null;
   startAtBat();
   if(G.derby&&G.derby.two) banner('HOME RUN DERBY','2 ROUNDS · 5 OUTS A TURN · '+G.teams[1].abbr+' UP',null,2.2);
   else if(G.derby) banner('HOME RUN DERBY',DERBY_OUTS+' OUTS. HIT IT OUT!',null,2);
-  else banner('PLAY BALL!',away.abbr+' AT '+home.abbr,null,1.8);
+  else banner('PLAY BALL!',away.abbr+' AT '+home.abbr+(G.venue.park?' · WELLS FARM':''),null,1.8);
   stopMusic(); if(!demo) SFX.charge();
 }
 function derbyTurnOver(){
@@ -1409,8 +1512,8 @@ function simTraj(v,la,sp){
     pts.push({x,y,z});
     // a normal homer drops a few rows deep into the crowd; a tape-measure shot sails out of the stadium
     if(hr&&++after>(out?160:10)) break;
-    const s=hyp(vx,vy,vz),k=KD*s;
-    vx-=k*vx*DT; vy-=k*vy*DT; vz-=(32+k*vz)*DT; x+=vx*DT; y+=vy*DT; z+=vz*DT;
+    const ax=vx-WIND.vx,ay=vy-WIND.vy,s=hyp(ax,ay,vz),k=KD*s;   // drag acts on the ball's speed through the air
+    vx-=k*ax*DT; vy-=k*ay*DT; vz-=(32+k*vz)*DT; x+=vx*DT; y+=vy*DT; z+=vz*DT;
     if(hr) continue;
     const r=hyp(x,y),th=Math.atan2(x,y)*180/Math.PI;
     if(y>0&&Math.abs(th)<=45){
@@ -1418,7 +1521,7 @@ function simTraj(v,la,sp){
       if(r>=fr){
         if(z>8&&fc<0){ hr=true;
           // how far it would have carried: finish the flight with no stands in the way
-          let X=x,Y=y,Z=z,VX=vx,VY=vy,VZ=vz; for(let k=0;k<900&&Z>0;k++){ const q=hyp(VX,VY,VZ),kk=KD*q; VX-=kk*VX*DT; VY-=kk*VY*DT; VZ-=(32+kk*VZ)*DT; X+=VX*DT; Y+=VY*DT; Z+=VZ*DT; }
+          let X=x,Y=y,Z=z,VX=vx,VY=vy,VZ=vz; for(let k=0;k<900&&Z>0;k++){ const AX=VX-WIND.vx,AY=VY-WIND.vy,q=hyp(AX,AY,VZ),kk=KD*q; VX-=kk*AX*DT; VY-=kk*AY*DT; VZ-=(32+kk*VZ)*DT; X+=VX*DT; Y+=VY*DT; Z+=VZ*DT; }
           dist=Math.round(hyp(X,Y)); out=dist>=OUT_FT; continue; }
         if(z>10&&fc>=0){ gr=true; pts.push({x,y,z}); break; }   // bounced over: ground-rule double
         if(fc<0) wall=i+1;
@@ -1775,7 +1878,7 @@ function drawBoard(){
 }
 function drawPitch(){
   ctx.drawImage(bgPitch,0,0,W,H);
-  drawBoard();
+  drawBoard(); drawWind(62,27);
   const def=G.teams[1-G.half],off=G.teams[G.half];
   for(const i of [7,6,8,3,4,2,5]){ const [x,y]=POS0[i],q=pp(x,y); if(q[0]<-10||q[0]>W+10) continue;
     const k=Math.max(.3,Math.round(q[2]/3.3*10)/10); shadowEll(q[0],q[1],4*k,1.3*k);
@@ -1876,6 +1979,7 @@ function drawField(){
     if(F.tr.out) bigText('OUT OF THE PARK!',128,34,8,'#ffffff','#e2483b');
     bigText(F.tr.dist+' FT',128,46,16,'#fffbe8','#f4c84a','#7a2a14'); }
   if(G.fb&&G.fb.t>0&&!F.steal){ ctx.fillStyle='rgba(8,7,14,.75)'; ctx.fillRect(0,23,W,13); txt(G.fb.text,128,26,G.fb.col,'center'); }
+  drawWind(226,212);
 }
 function drawBanner(){
   const b=G.banner,age=b.T-b.t,k=Math.min(1,age/.18),fade=Math.min(1,b.t/.18),hgt=b.sub?54:40,y=92;
@@ -1911,9 +2015,10 @@ function drawTitle(){
   bigText("'88",150,46,16,'#ffb39f','#d8382c','#3a0d0a');
   drawSpinBall(104,54,9,tm);
   const rows=menuRows(),lk=seaLocked();
-  panel(8,90,240,rows.length*14+6);
-  rows.forEach(([key,k,v],i)=>{ const y=95+i*14,sel=MENU.row===i,dim=lk&&['lvl','you','inn'].includes(key);
-    if(sel){ ctx.fillStyle='rgba(244,200,74,.12)'; ctx.fillRect(10,y-3,236,13); ctx.fillStyle=C.yellow; ctx.fillRect(10,y-3,2,13); }
+  const sp=rows.length>7?11:14,y0=rows.length>7?80:90;
+  panel(8,y0,240,rows.length*sp+6);
+  rows.forEach(([key,k,v],i)=>{ const y=y0+5+i*sp,sel=MENU.row===i,dim=lk&&['lvl','you','inn'].includes(key);
+    if(sel){ ctx.fillStyle='rgba(244,200,74,.12)'; ctx.fillRect(10,y-(sp-8)/2-1,236,sp-1); ctx.fillStyle=C.yellow; ctx.fillRect(10,y-(sp-8)/2-1,2,sp-1); }
     txt(k,16,y,sel?C.yellow:C.dim);
     if(typeof v==='object'){ teamChip(v,89,y-.5); txt(v.name,100,y,dim?C.dim:C.text); } else txt(String(v),100,y,dim?C.dim:v[0]==='+'?C.yellow:C.text); });
   if((tm*2|0)%2) txt('PRESS START',128,204,C.text,'center');
@@ -1995,8 +2100,9 @@ function menuRows(){
   const m=MENU.mode,AT=allTeams(),lk=seaLocked();
   const R={mode:['MODE',MODES[m]],lvl:['LEVEL',LVL[lk?SEA.lvl:MENU.lvl].name],you:['YOU',lk?(AT[seaIdx(SEA.teams[0])]||'?'):(AT[MENU.you]||'+ NEW TEAM')],
     cpu:[m===1?'PITCHER':m===2?'P2':'CPU',AT[MENU.cpu]],inn:['INNINGS',INN[lk?SEA.inn:MENU.inn]],bat:['YOU BAT',MENU.bat?'2ND (HOME)':'1ST (AWAY)'],
-    fld:['FIELDING',MENU.fld?'MANUAL':'AUTO'],net:['ONLINE',MENU.net?'JOIN A GAME':'HOST A GAME'],ntype:['PLAY',MENU.ntype?'HR DERBY':'GAME'],sea:['SEASON',SEA&&SEA.g<SEA.sched.length?(MENU.sea?'START NEW':'CONTINUE '+(SEA.g+1)+'/'+SEA.sched.length):'NEW']};
-  const keys=m===0?['mode','lvl','you','cpu','inn','bat','fld']:m===1?['mode','lvl','you','cpu']:m===2?(MENU.net?['mode','net','you']:MENU.ntype?['mode','net','ntype','you']:['mode','net','ntype','you','inn','bat','fld']):['mode','sea','lvl','you','inn','fld'];
+    fld:['FIELDING',MENU.fld?'MANUAL':'AUTO'],park:['PARK',PARKS[MENU.park]],time:['TIME',MENU.time?'DAY':'NIGHT'],wind:['WIND',MENU.wind?'WINDY':'CALM'],net:['ONLINE',MENU.net?'JOIN A GAME':'HOST A GAME'],ntype:['PLAY',MENU.ntype?'HR DERBY':'GAME'],sea:['SEASON',SEA&&SEA.g<SEA.sched.length?(MENU.sea?'START NEW':'CONTINUE '+(SEA.g+1)+'/'+SEA.sched.length):'NEW']};
+  const V=['park','time','wind'];
+  const keys=m===0?['mode','lvl','you','cpu','inn','bat','fld',...V]:m===1?['mode','lvl','you','cpu',...V]:m===2?(MENU.net?['mode','net','you']:MENU.ntype?['mode','net','ntype','you',...V]:['mode','net','ntype','you','inn','bat','fld',...V]):['mode','sea','lvl','you','inn','fld',...V];
   return keys.map(k=>[k,...R[k]]);
 }
 function updateTitle(dt){
@@ -2020,6 +2126,9 @@ function updateTitle(dt){
     if(key==='sea') MENU.sea=1-MENU.sea;
     if(key==='net'){ MENU.net=1-MENU.net; MENU.row=Math.min(MENU.row,menuRows().length-1); }
     if(key==='ntype'){ MENU.ntype=1-MENU.ntype; }
+    if(key==='park'||key==='time'){ if(key==='park') MENU.park=(MENU.park+ch+PARKS.length)%PARKS.length; else MENU.time=1-MENU.time;
+      clearTimeout(MENU.vt); MENU.vt=setTimeout(()=>{ if(mode==='title') setVenue(MENU.park,MENU.time); },120); }
+    if(key==='wind') MENU.wind=1-MENU.wind;
     saveSettings();
   }
   const L=allTeams(),you=L[MENU.you];
@@ -2152,7 +2261,8 @@ function netApply(m){
   if(!NET.live){ NET.live=true; clearKeys(); stopMusic(); }
   if(m.teams) NET.teams=m.teams;
   if(m.tr) NET.tr=m.tr;
-  G=Object.assign(m.G,{teams:NET.teams||[]}); P=m.P; F=m.F?Object.assign(m.F,{tr:NET.tr||{pts:[]}}):null;
+  G=Object.assign(m.G,{teams:NET.teams||[]}); P=m.P;
+  if(G.venue&&(G.venue.park!==VEN.park||G.venue.day!==VEN.day)) setVenue(G.venue.park,G.venue.day); F=m.F?Object.assign(m.F,{tr:NET.tr||{pts:[]}}):null;
   mode=m.mode==='play'||m.mode==='over'?m.mode:'lobby'; paused=m.paused;
   CAM.x=m.CAM.x; CAM.y=m.CAM.y; FX=m.FX||[]; shakeT=m.shakeT; shakeA=m.shakeA; flashT=m.flashT;
   for(const e of m.sfx||[]){ if(e[0]==='song') playSong(e[1],e[2]); else if(e[0]==='stop') stopMusic(); else if(SFX[e[0]]) SFX[e[0]].__raw(); }
@@ -2474,6 +2584,9 @@ function hint(){
   else if(mode==='season') h=`${L.A} play the next game · ${L.lr} standings and stats · ${L.B} menu`;
   else if(mode==='title'){ const yt=allTeams()[MENU.you],rk=(menuRows()[MENU.row]||[])[0];
     h=rk==='mode'?(MENU.mode===2?'2 PLAYER: online, each player on their own phone or laptop. One hosts, the other joins with the code.':MENU.mode===3?'SEASON: 9 games against 3 teams, with standings and season stats.':`${L.lr} change mode · ${L.S} to play`)
+      :rk==='park'?'WELLS FARM: a tree-farm ballpark with The Pines coffee stand and the big red barn past the fence.'
+      :rk==='time'?'DAY or NIGHT game (at night the farm trees light up).'
+      :rk==='wind'?'WINDY: a random wind each game. Blowing out carries fly balls farther; blowing in knocks them down.'
       :rk==='fld'?'MANUAL: steer the fielder with the d-pad, then direction + A to throw (▶ 1st ▲ 2nd ◀ 3rd ▼ home).'
       :rk==='you'&&!seaLocked()?(!yt?`${L.A} to build a new team`:yt.custom?`${L.lr} pick a team · ${L.B} edit this team · ${L.S} to play`:`${L.lr} pick a team · ${L.B} build a new team · ${L.S} to play`)
       :`${L.ud} pick a row · ${L.lr} change it · ${L.S} to play`; }
@@ -2513,7 +2626,7 @@ async function boot(){
   try{ await Promise.race([document.fonts.load(tinyFont(8)),new Promise(r=>setTimeout(r,2500))]); }catch(_){}
   txt('LOADING',128,112,C.dim,'center');
   await new Promise(r=>setTimeout(r,20));
-  bgWorld=buildWorld(); bgPitch=buildPitchBG(); window.__ready=true; probeApi();
+  setVenue(MENU.park,MENU.time); window.__ready=true; probeApi();
   const sh=location.hash.match(/[#&]t=(D1[\w-]+)/);
   if(sh){ try{ history.replaceState(null,'',location.pathname+location.search); }catch(_){}
     const v=teamFromCode(sh[1]); if(v){ openBuilder(v); TB.id=null; TB.msg='A FRIEND SHARED THIS TEAM. TAP SAVE TEAM TO KEEP IT.'; renderTB(); } }

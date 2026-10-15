@@ -1132,6 +1132,29 @@ function pitcherSprite(t,skin,frame,ball){
   if(!c){ c=pixelSprite(26*SPR_U,30*SPR_U,pitcherParts(PIT8[frame],kit8(t,skin),ball,SPR_U),false,SPR_U>1); spr8Cache.set(key,c); }
   return c;
 }
+// catcher, seen from behind in his crouch below the plate (R.B.I. style); art in hi-res pixels (1.5 game px each)
+function catcherParts(k,glove){
+  const L=(a,b,r0,r1,c,o={})=>({k:'line',p:[a,b],r0,r1,c,...o});
+  const P=[
+    L([12,19],[6.5,21.5],2.4,2.1,k.pan),L([20,19],[25.5,21.5],2.4,2.1,k.pan),                 // thighs out to the sides
+    L([6.5,21.5],[8.5,26],2,1.8,k.cap),L([25.5,21.5],[23.5,26],2,1.8,k.cap),                  // shin guards
+    L([8.5,26.2],[11,26.6],1.5,1.3,k.shoe),L([23.5,26.2],[21,26.6],1.5,1.3,k.shoe),
+    {k:'poly',p:[[8.5,10],[23.5,10],[22.5,20],[9.5,20]],c:k.jer,c2:k.jerD,shadeX:11},
+    L([10,11.5],[22,19],.5,.5,k.capD,{flat:1}),L([22,11.5],[10,19],.5,.5,k.capD,{flat:1}),       // chest-protector straps
+    {k:'rect',x:9,y:19,w:14,h:2,c:k.pan},
+    L([9.5,11.5],[6,15.5],1.7,1.5,k.jerD,{sep:1}),L([6,15.5],[7,20],1.4,1.3,k.skinD,{sep:1}),   // throwing hand tucked on his knee
+    {k:'disc',x:16,y:6.5,r:5,c:k.cap},{k:'rect',x:11,y:9,w:10,h:2,c:k.capD},                   // helmet on backwards
+    {k:'rect',x:14,y:3,w:2,h:2,c:'#ffffff',flat:1},
+    L([22.5,11.5],[26,8.5],1.7,1.5,k.jer,{sep:1}),                                            // glove arm up, mitt showing the target
+    {k:'disc',x:26.5,y:6.5,r:3.6,c:k.mitt,sep:1},{k:'disc',x:27.3,y:6,r:1.6,c:k.mittD,flat:1},
+  ];
+  return P;
+}
+function drawCatcher(t,skin){
+  const key='C'+t.abbr+t.jersey+t.cap+t.pants+skin; let c=spr8Cache.get(key);
+  if(!c){ c=pixelSprite(32,28,catcherParts(kit8(t,skin)),false,true); spr8Cache.set(key,c); }
+  ctx.drawImage(c,snap(128-16*1.5),snap(224-28*1.5),32*1.5,28*1.5);   // feet tuck behind the batter card
+}
 const BAT_PX=3,PIT_PX=1.5;   // game pixels per NES-grid pixel; the sprites are drawn SPR_U times finer than that
 const SPR_U=2;
 function batFrame(phase,bunt){ return bunt?'bunt':phase<=0?'stance':phase<.22?'load':phase<.5?'contact':phase<.72?'extend':'follow'; }
@@ -1968,6 +1991,7 @@ function drawPitch(){
     const hd=pp(-P.hb*2.9+P.off-P.hb*.6*k,.3,6.3);
     for(let i=0;i<3;i++){ const a=P.t*6+i*2.1; drawStar(hd[0]+Math.cos(a)*12,hd[1]+Math.sin(a)*3); } }
   else drawBatter(off,skinOf(bt[0]),P.hb,P.off,P.swing&&P.swing.bunt?.42:phase,!!(P.swing&&P.swing.bunt));
+  drawCatcher(def,skinOf(def.lineup[1][0]));
   if(front) drawBall();
   if(P.state==='contact'&&bq){ const a=P.t*9;
     ctx.save(); ctx.translate(bq[0],bq[1]); ctx.rotate(a*.3);

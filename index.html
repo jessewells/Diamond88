@@ -809,436 +809,67 @@ function buildPitchBG(){
 function polyPath(g,pts){ g.beginPath(); pts.forEach((p,i)=>i?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1])); g.closePath(); }
 let bgWorld=null,bgPitch=null;
 
-/* ---------------- bodies ---------------- */
-// Players are posed skeletons: tapered capsule limbs, a shaded torso and a rounded head, outlined per layer.
-const INK='#130f18';
+/* ---------------- players ---------------- */
 const snap=v=>Math.round(v*RS)/RS;
 function shadowEll(x,y,rx,ry){ ctx.fillStyle='rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(x,y,rx,ry,0,0,7); ctx.fill(); }
-function capsule(a,b,ra,rb){
-  const p=new Path2D(),th=Math.atan2(b[1]-a[1],b[0]-a[0]),nx=-Math.sin(th),ny=Math.cos(th);
-  p.moveTo(a[0]+nx*ra,a[1]+ny*ra); p.lineTo(b[0]+nx*rb,b[1]+ny*rb);
-  p.arc(b[0],b[1],rb,th+Math.PI/2,th-Math.PI/2,true);
-  p.lineTo(a[0]-nx*ra,a[1]-ny*ra);
-  p.arc(a[0],a[1],ra,th-Math.PI/2,th-1.5*Math.PI,true);
-  p.closePath(); return p;
+/* ---------------- hand-drawn sprites, R.B.I. Baseball style ----------------
+   Pixel art, one letter per pixel, coloured from the team's kit; artCanvas adds a 1px dark outline around the figure.
+   H cap/helmet, h its shade, w cap shine, S/s skin, E eyes, J/j jersey, A dark sleeves, P/p pants, O socks, B/b shoes, L belt,
+   T/t bat, G/g glove. Batters are right-handed (mirrored for lefties); field runners face right. */
+const ART={bat:{stance:["........T.................", "........Tt................", "........Tt................", "........Tt................", "........Tt.....HHHH.......", "........Tt...HHHHHHHH.....", "........Tt..HHHHHwwHHH....", "........Tt.HHHHHHHHwHHH...", "........TtHHHHHHHHHHHHH...", "........TtHHHHHHHHHHHHhh..", "........TtHHHHHHHHHHHSSs..", "........TthHHHHHHHHHSSSSs.", "........Tt.hHHHHHHHhSSSS..", "........Tt..hhhhhhhhsSSs..", "........Tt....sSSSSSss....", ".......JTtJJJJJJJJJJJJJ...", "......JJTtJJJJJJJJJJJJJJ..", "....AAAJTtJJJJJJJJJJJJJJ..", "...AAAAATtJJJJJJJJJJJJJAA.", "..AAAAAATtJJJJJJJJJJJAAAA.", "..AAAAASSSSJJJJJJJAAAAAA..", "...AAASSSSSSAAAAAAAAAJJ...", "....AASSSSSSAAAAAAJJJJJ...", ".....jsSSSSsJJJJJJJJJJj...", ".....jjssssJJJJJJJJJJJj...", ".....jjJJJJJJJJJJJJJJjj...", "......jjJJJJJJJJJJJJjj....", "......LLLLLLLLLLLLLLLL....", "......PPPPPPPPPPPPPPPP....", ".....PPPPPPPPpPPPPPPPPP...", "....pPPPPPPPp..pPPPPPPPP..", "....pPPPPPPp....pPPPPPPP..", "...pPPPPPPp......pPPPPPP..", "...pPPPPPp........pPPPPPp.", "...pPPPPP.........pPPPPPp.", "..pPPPPPP..........pPPPPP.", "..pPPPPP...........pPPPPP.", "..OOOOOO............OOOOO.", "..OOOOOO............OOOOO.", "..OOOOO.............OOOOO.", ".BBBBBBb............BBBBBBb", ".BBBBBBBBb..........BBBBBBBb"],load:["...T......................", "...Tt.....................", "....Tt....................", "....Tt....................", ".....Tt........HHHH.......", ".....Tt......HHHHHHHH.....", "......Tt....HHHHHwwHHH....", "......Tt...HHHHHHHHwHHH...", ".......TtHHHHHHHHHHHHHH...", ".......TtHHHHHHHHHHHHHhh..", "........TtHHHHHHHHHHHSSs..", "........TthHHHHHHHHHSSSSs.", ".........Tt.hHHHHHHhSSSS..", ".........Tt.hhhhhhhhsSSs..", "..........Tt..sSSSSSss....", ".......JJJTtJJJJJJJJJJJ...", "......JJJJJTtJJJJJJJJJJJ..", "...AAAAJJJJTtJJJJJJJJJJJ..", "..AAAAAAJJJJTtJJJJJJJJJAA.", ".AAAAAAAJJJJJTtJJJJJJAAAA.", ".AAAAAASSSSJJJJJJJAAAAAA..", "..AAASSSSSSAAAAAAAAAJJJ...", "...AASSSSSSAAAAAAJJJJJJ...", "....jjsSSSSsJJJJJJJJJJj...", ".....jjssssJJJJJJJJJJJj...", ".....jjJJJJJJJJJJJJJJjj...", "......jjJJJJJJJJJJJJjj....", "......LLLLLLLLLLLLLLLL....", "......PPPPPPPPPPPPPPPP....", ".....PPPPPPPPpPPPPPPPPP...", "....pPPPPPPPp..pPPPPPPPP..", "....pPPPPPPp....pPPPPPPP..", "...pPPPPPPp.....pPPPPPPp..", "...pPPPPPp.......pPPPPPp..", "...pPPPPP........pPPPPPp..", "..pPPPPPP.........pPPPPPp.", "..pPPPPP..........pPPPPPp.", "..OOOOOO..........OOOOOO..", "..OOOOOO..........OOOOO...", "..OOOOO...........OOOOO...", ".BBBBBBb..........BBBBBBb.", ".BBBBBBBBb........BBBBBBBBb"],contact:["..............................................", "..............................................", "..............................................", "..............................................", "..........HHHH................................", "........HHHHHHHH..............................", ".......HHHHHwwHHH.............................", "......HHHHHHHHwHHH............................", ".....HHHHHHHHHHHHHH...........................", ".....HHHHHHHHHHHHHHhh.........................", ".....HHHHHHHHHHHHHSSs.........................", ".....hHHHHHHHHHHHSSSSs........................", "......hHHHHHHHHHhSSSS.........................", ".......hhhhhhhhhsSSs..........................", ".........sSSSSSss.............................", "......JJJJJJJJJJJJJJJ.........................", ".....JJJJJJJJJJJJJJJJJ........................", "....JJJJJJJJJJJJJJJJJJAA......................", "....JJJJJJJJJJJJJJJAAAAAAA....................", "....JJJJJJJJJJJAAAAAAAAAAAAA..................", "....JJJJJJJJAAAAAAAAAAAAAASSSS................", "....jJJJJJJJJJJJJJJAAAAAASSSSSTTTTTTTTTTTTTTTT", "....jJJJJJJJJJJJJJJJJJJJJjSSSSTtttttttttttttttt", "....jjJJJJJJJJJJJJJJJJJJj..ss..................", ".....jjJJJJJJJJJJJJJJJJjj......................", ".....jjJJJJJJJJJJJJJJJjj.......................", "......jjJJJJJJJJJJJJJjj........................", "......LLLLLLLLLLLLLLLL.........................", "......PPPPPPPPPPPPPPPP.........................", ".....PPPPPPPPpPPPPPPPPP........................", "....pPPPPPPPp..pPPPPPPPP.......................", "....pPPPPPPp....pPPPPPPPP......................", "...pPPPPPPp......pPPPPPPP......................", "...pPPPPPp........pPPPPPPp.....................", "...pPPPPP..........pPPPPPp.....................", "..pPPPPP...........pPPPPPp.....................", "..pPPPP.............pPPPPp.....................", "..OOOO..............OOOOOO.....................", "..OOOO..............OOOOOO.....................", ".OOOO................OOOOO.....................", "BBBBBb...............BBBBBBb...................", "BBBBBBBb.............BBBBBBBBb................."],follow:["..........................", "..........................", "..........................", "..........................", "..........HHHH............", "........HHHHHHHH..........", ".......HHHHHwwHHH.........", "......HHHHHHHHwHHH........", ".....HHHHHHHHHHHHHH.......", "TTt..HHHHHHHHHHHHHHhh.....", ".TTtt.HHHHHHHHHHHSSs......", "...TTtthHHHHHHHHSSSSs.....", ".....TTtthHHHHHhSSSS......", ".......TTtthhhhhsSSs......", ".........TTtSSSSs.........", "......JJJJJTTSSSSAA.......", ".....JJJJJJJJSSSSAAAA.....", "....JJJJJJJJJJAAAAAAAA....", "....JJJJJJJJJJJJJAAAAAA...", "....JJJJJJJJJJJJJJJAAAA...", "....JJJJJJJJJJJJJJJJJAA...", "....jJJJJJJJJJJJJJJJJJJ...", "....jJJJJJJJJJJJJJJJJJj...", "....jjJJJJJJJJJJJJJJJJj...", ".....jjJJJJJJJJJJJJJJjj...", ".....jjJJJJJJJJJJJJJjj....", "......jjJJJJJJJJJJJjj.....", "......LLLLLLLLLLLLLLL.....", "......PPPPPPPPPPPPPPP.....", ".....PPPPPPPPpPPPPPPPP....", "....pPPPPPPPp..pPPPPPPP...", "....pPPPPPPp....pPPPPPPP..", ".....pPPPPPp.....pPPPPPP..", ".....pPPPPp.......pPPPPPp.", "......pPPPP........pPPPPp.", "......pPPPP........pPPPPp.", ".......OOOO.........OOOOO.", ".......OOOO.........OOOOO.", "......OOOOO.........OOOOO.", ".....BBBBBb.........BBBBBBb", "....BBBBBBb.........BBBBBBBb"],bunt:["..............................", "..............................", "..............................", "..............................", "..........HHHH................", "........HHHHHHHH..............", ".......HHHHHwwHHH.............", "......HHHHHHHHwHHH............", ".....HHHHHHHHHHHHHH...........", ".....HHHHHHHHHHHHHHhh.........", ".....HHHHHHHHHHHHHSSs.........", ".....hHHHHHHHHHHHSSSSs........", "......hHHHHHHHHHhSSSS.........", ".......hhhhhhhhhsSSs..........", ".........sSSSSSss.............", "......JJJJJJJJJJJJJJJ.........", ".....JJJJJJJJJJJJJJJJJ........", "....AAJJJJJJJJJJJJJJJJAA......", "...AAAAJJJJJJJJJJJJJAAAAA.....", "...AAAAAJJJJJJJJJJAAAAAAAA....", "....AAAASSSJJJJJJJAAAASSSS....", ".TTTTTTSSSSTTTTTTTTTTSSSSSTTTT", ".ttttttSSSSttttttttttSSSSStttt", "....jjJssJJJJJJJJJJJJJsss.....", ".....jjJJJJJJJJJJJJJJJjj......", ".....jjJJJJJJJJJJJJJJjj.......", "......jjJJJJJJJJJJJJjj........", "......LLLLLLLLLLLLLLLL........", "......PPPPPPPPPPPPPPPP........", ".....PPPPPPPPpPPPPPPPPP.......", "....pPPPPPPPp..pPPPPPPPP......", "....pPPPPPPp....pPPPPPPP......", "...pPPPPPPp......pPPPPPP......", "...pPPPPPp........pPPPPPp.....", "...pPPPPP.........pPPPPPp.....", "..pPPPPPP..........pPPPPP.....", "..pPPPPP...........pPPPPP.....", "..OOOOOO............OOOOO.....", "..OOOOOO............OOOOO.....", "..OOOOO.............OOOOO.....", ".BBBBBBb............BBBBBBb...", ".BBBBBBBBb..........BBBBBBBb.."]},
+  pit:{set:[".......HHHH.......", ".....HHHHHHHH.....", ".....HHHwHHHH.....", "....hhhhhhhhhh....", ".....SSSSSSSS.....", ".....SESSSSES.....", ".....SSSSSSSS.....", "......SSssSS......", ".......sSSs.......", "...JJJJJJJJJJJJ...", "..JJJJJJJJJJJJJJ..", "..JJJJJGGGGJJJJJ..", "..JJJJGGGGGGJJJJ..", "..JJJJGGgGGGJJJJ..", "..SJJJGGGGGGJJJS..", "...jJJJGGGGJJJj...", "...jJJJJJJJJJJj...", "...LLLLLLLLLLLL...", "...PPPPPPPPPPPP...", "...PPPPPPPPPPPP...", "...PPPPP..PPPPP...", "...PPPPP..PPPPP...", "...pPPPP..PPPPp...", "...pPPPP..PPPPp...", "...OOOO....OOOO...", "...OOOO....OOOO...", "..BBBBB....BBBBB..", "..BBBBB....BBBBB.."],kick:[".......HHHH.......", ".....HHHHHHHH.....", ".....HHHwHHHH.....", "....hhhhhhhhhh....", ".....SSSSSSSS.....", ".....SESSSSES.....", ".....SSSSSSSS.....", "......SSssSS......", ".......sSSs.......", "...JJJJJJJJJJJJ...", "..JJJJJGGGGJJJJJ..", "..JJJJGGGGGGJJJJ..", "..JJJJGGgGGGJJJJ..", "..SJJJGGGGGGJJJS..", "...jJJJGGGGJJJj...", "...jJJJJJJJJJJj...", "...LLLLLLLLLLLL...", "...PPPPPPPPPPPPPP.", "...PPPPPPPPPPPPPPP", "...PPPPP...PPPPPPP", "...PPPPP.....OOPPP", "...pPPPP.....OOOOp", "...pPPPP......OOOO", "...pPPPP.......BBB", "...OOOO........BBB", "...OOOO...........", "...OOOO...........", "..BBBBB...........", "..BBBBB..........."],cock:["..................", ".SS....HHHH.......", ".SS..HHHHHHHH.....", ".AA..HHHwHHHH.....", ".AA.hhhhhhhhhh....", ".AA..SSSSSSSS.....", ".AA..SESSSSES.....", ".AAJ.SSSSSSSS.....", "..AAJ.SSssSS......", "..AAJJ.sSSs.......", "...JJJJJJJJJJJJ...", "...JJJJJJJJJJJJJ..", "...JJJJJJJJJJGGG..", "...JJJJJJJJJGGGGG.", "...JJJJJJJJJGGgGG.", "...jJJJJJJJJJGGG..", "...jJJJJJJJJJJj...", "...LLLLLLLLLLLL...", "...PPPPPPPPPPPP...", "..PPPPPP..PPPPPP..", "..PPPPP....PPPPP..", ".pPPPP......PPPPp.", ".pPPPP......PPPPp.", "pPPPP........PPPPp", "OOOO..........OOOO", "OOOO..........OOOO", "BBBBB........BBBBB", "BBBBB........BBBBB"],release:["..................", ".......HHHH.......", ".....HHHHHHHH.....", ".....HHHwHHHH.SS..", "....hhhhhhhhhhSS..", ".....SSSSSSSSAA...", ".....SESSSSESA....", ".....SSSSSSSAA....", "......SSssSAA.....", ".......sSSAA......", "...JJJJJJJJJJJJ...", "..JJJJJJJJJJJJJJ..", ".GGGJJJJJJJJJJJJ..", "GGGGGJJJJJJJJJJJ..", "GGgGGJJJJJJJJJJJ..", ".GGGJJJJJJJJJJJj..", "...jJJJJJJJJJJj...", "...LLLLLLLLLLLL...", "...PPPPPPPPPPPP...", "..PPPPPP..PPPPPP..", "..PPPPP....PPPPP..", ".pPPPP......PPPPp.", ".pPPPP......PPPPp.", "pPPPP........PPPPp", "OOOO..........OOOO", "OOOO..........OOOO", "BBBBB........BBBBB", "BBBBB........BBBBB"],follow:["..................", "..................", "..................", "..................", "........HHHH......", "......HHHHHHHH....", "......HHHwHHHH....", ".....hhhhhhhhhh...", "......SSSSSSSS....", "......SESSSSES....", "......SSSSSSSS....", "...JJJJSSssSSJJ...", "..JJJJJJsSSsJJJJ..", "..JJJJJJJJJJJJJJ..", ".GGGJJJJJJJJJJJJ..", "GGGGGJJJJJJJAAAA..", "GGgGGJJJJJAAAASS..", ".GGGJJJJJJJJJJSS..", "...jJJJJJJJJJJj...", "...LLLLLLLLLLLL...", "...PPPPPPPPPPPP...", "..PPPPPP..PPPPPP..", "..PPPPP....PPPPPP.", ".pPPPP......PPPPPP", "pPPPP........OOOOO", "OOOO..........BBBB", "BBBBB.........BBBB", "BBBBB............."]},
+  fld:{stand:["...HHHH....", "..HHHwHH...", ".hhhhhhhh..", "..SSSSSS...", "..SESSES...", "...SssS....", ".JJJJJJJJ..", "JJJJJJJJJJ.", "SJJJJJJJGG.", "SJJJJJJJGG.", ".LLLLLLLL..", ".PPPPPPPP..", ".PPP..PPP..", ".PPP..PPP..", ".OOO..OOO..", "BBBB..BBBB."],runA:["...HHHH.....", "..HHHHHHh...", "..HHHHHhhh..", "...SSSSS....", "...SSESs....", "....SSs.....", "...JJJJJ....", "..JJJJJJJSS.", ".SJJJJJJ....", "SS.JJJJJ....", "...LLLLL....", "..PPPPPPP...", ".PPP...PPP..", "PPP.....PPP.", "OO.......OO.", "BB.......BBB"],runB:["...HHHH.....", "..HHHHHHh...", "..HHHHHhhh..", "...SSSSS....", "...SSESs....", "....SSs.....", "...JJJJJ....", "...JJJJJJ...", "...JSJJJJ...", "....SJJJJ...", "...LLLLL....", "...PPPPP....", "...PPPPP....", "....PPPP....", "....OOO.....", "...BBBBB...."],throw:["SS..HHHH....", "SS.HHHHHHh..", "AA.HHHHHhhh.", ".AA.SSSSS...", "..AA.SESs...", "...JJSSs....", "...JJJJJJ...", "..JJJJJJJGG.", "..JJJJJJJGG.", "...JJJJJ....", "...LLLLL....", "..PPPPPPP...", ".PPP...PPP..", "PPP.....PPP.", "OO.......OO.", "BB.......BBB"],hrA:["...HHHH..SS.", "..HHHHHHhSS.", "..HHHHHhhhA.", "...SSSSS.AA.", "...SSESs.A..", "....SSsJJ...", "...JJJJJ....", "..JJJJJJ....", ".SJJJJJJ....", "SS.JJJJJ....", "...LLLLL....", "..PPPPPPP...", ".PPP...PPP..", "PPP.....PPP.", "OO.......OO.", "BB.......BBB"],hrB:["...HHHH..SS.", "..HHHHHHhSS.", "..HHHHHhhhA.", "...SSSSS.AA.", "...SSESs.A..", "....SSsJJ...", "...JJJJJ....", "...JJJJJJ...", "...JSJJJJ...", "....SJJJJ...", "...LLLLL....", "...PPPPP....", "...PPPPP....", "....PPPP....", "....OOO.....", "...BBBBB...."]},
+  catcher:[".....HHHHHH.....", "...HHHHHHHHHH...", "..HHHHHwwHHHHH..", ".HHHHHHSSHHHHHH.", ".HHHHHHSSHHHHHH.", "HSSSSSSSSSSSSSSH", "HHHHHHHSSHHHHHHH", "HHHHHHHSSHHHHHHH", ".hhhhhhSShhhhhh.", "..hhhhhhhhhhhh.."]};
+function artKit(t,skin){
+  // a helmet the same colour as the jersey would melt into it, so darken it a step
+  const d=hex2rgb(t.cap).reduce((s,v,i)=>s+Math.abs(v-hex2rgb(t.jersey)[i]),0),H=d<70?shade(t.cap,.62):t.cap;
+  return {H,h:shade(H,.62),w:shade(H,1.7),S:skin,s:shade(skin,.78),E:'#0d0b10',J:t.jersey,j:shade(t.jersey,.72),A:shade(t.jersey,.45),
+  P:t.pants,p:shade(t.pants,.78),O:t.cap,B:'#1c1820',b:'#4a4450',L:'#1c1820',T:'#3a2a22',t:'#7a5a40',G:'#8a5226',g:'#5a3214'}; }
+function artCanvas(rows,kit,flip,noGlove){
+  const h=rows.length,w=Math.max(...rows.map(r=>r.length)),W2=w+2,H2=h+2,on=new Uint8Array(W2*H2),c=document.createElement('canvas'); c.width=W2; c.height=H2; const g=c.getContext('2d');
+  rows.forEach((r,y)=>{ for(let x=0;x<r.length;x++){ let ch=r[x]; if(ch==='.') continue; if(noGlove&&(ch==='G'||ch==='g')) ch=ch==='G'?'S':'s';
+    const col=kit[ch]; if(!col) continue; const X=(flip?w-1-x:x)+1; g.fillStyle=col; g.fillRect(X,y+1,1,1); on[(y+1)*W2+X]=1; } });
+  g.fillStyle='#0d0b10';
+  for(let y=0;y<H2;y++) for(let x=0;x<W2;x++){ if(on[y*W2+x]) continue;
+    if((x>0&&on[y*W2+x-1])||(x<W2-1&&on[y*W2+x+1])||(y>0&&on[(y-1)*W2+x])||(y<H2-1&&on[(y+1)*W2+x])) g.fillRect(x,y,1,1); }
+  c.aw=w; c.ah=h; return c;
 }
-function ell(c,rx,ry){ const p=new Path2D(); p.ellipse(c[0],c[1],rx,ry,0,0,7); return p; }
-const KEYS=['pel','neck','head','sN','eN','hN','sF','eF','hF','hipN','kN','aN','hipF','kF','aF'];
-function lerpPose(A,B,t){ const o={front:A.front}; for(const k of KEYS) o[k]=lerp2(A[k],B[k],t); return o; }
-function swapSides(A){ const o={...A}; for(const k of KEYS) if(k.endsWith('N')) { const f=k.slice(0,-1)+'F'; o[k]=A[f]; o[f]=A[k]; } return o; }
-
-function ik(s,h,L1,L2,hint){
-  const dx=h[0]-s[0],dy=h[1]-s[1],d=Math.hypot(dx,dy)||1e-3,dc=Math.min(d,L1+L2-1e-3),ux=dx/d,uy=dy/d;
-  const a=(L1*L1-L2*L2+dc*dc)/(2*dc),hh=Math.sqrt(Math.max(0,L1*L1-a*a));
-  const c1=[s[0]+ux*a-uy*hh,s[1]+uy*a+ux*hh],c2=[s[0]+ux*a+uy*hh,s[1]+uy*a-ux*hh];
-  return hyp(c1[0]-hint[0],c1[1]-hint[1])<hyp(c2[0]-hint[0],c2[1]-hint[1])?c1:c2;
+const artCache=new Map();
+function artSprite(set,frame,t,skin,flip,noGlove){
+  const key=set+frame+t.abbr+t.jersey+t.cap+t.pants+skin+(flip?1:0)+(noGlove?1:0); let c=artCache.get(key);
+  if(!c){ c=artCanvas(set==='catcher'?ART.catcher:ART[set][frame],artKit(t,skin),flip,noGlove); artCache.set(key,c); }
+  return c;
 }
-function drawSkel(g,ox,oy,s,face,P,kit,opt){
-  if(opt.ik){ P={...P}; P.eN=ik(P.sN,P.hN,opt.ik[0],opt.ik[1],P.eN); P.eF=ik(P.sF,P.hF,opt.ik[0],opt.ik[1],P.eF); }
-  const T=v=>[ox+v[0]*s*face,oy-v[1]*s],R=r=>r*s,B=r=>r*s*(opt.bulk||1),o=opt.o||Math.max(.45,s*.05),front=!!P.front;
-  const J=kit.jersey,Js=shade(J,.7),Pn=kit.pants,Ps=shade(Pn,.76),Cp=kit.cap,sk=opt.skin,skS=shade(sk,.8),shoe='#1b1720';
-  const layer=sh=>{ g.lineJoin='round'; g.lineWidth=o*2; g.strokeStyle=INK; g.fillStyle=INK;
-    for(const [p] of sh){ g.stroke(p); g.fill(p); } for(const [p,c] of sh){ g.fillStyle=c; g.fill(p); } };
-  const leg=(hip,k,a,far)=>{
-    const pc=far?Ps:Pn,sc=far?shade(Cp,.72):Cp,toe=front?[a[0]+(a[0]<0?-.18:.18),a[1]-.12]:[a[0]+.45,a[1]-.13];
-    return [[capsule(T(hip),T(k),B(.28),B(.21)),pc],[capsule(T(k),T(lerp2(k,a,.5)),B(.21),B(.17)),pc],
-            [capsule(T(lerp2(k,a,.42)),T(a),B(.165),B(.13)),sc],[capsule(T(a),T(toe),B(.15),B(.12)),shoe]]; };
-  const arm=(sh,el,h,far,glove)=>{
-    const jc=far?Js:J,sc=far?skS:sk;
-    const out=[[ell(T(sh),B(.24),B(.24)),jc],[capsule(T(sh),T(el),B(.18),B(.145)),sc],[capsule(T(sh),T(lerp2(sh,el,.58)),B(.21),B(.18)),jc],[capsule(T(el),T(h),B(.145),B(.11)),sc]];
-    if(glove) out.push([ell(T(h),R(.32),R(.27)),far?'#6a3d1b':'#7d4a22']);
-    else out.push([ell(T(h),R(opt.batGloves?.15:.13),R(opt.batGloves?.15:.13)),opt.batGloves?(far?'#cfc6b2':'#efe6d2'):sc]);
-    return out; };
-  // torso, seat, neck, head
-  const body=()=>{
-    const pel=P.pel,nk=P.neck,chest=lerp2(nk,pel,.16),hd=P.head,w=front?1:(opt.tw||0),out=[];
-    out.push([capsule(T(lerp2(pel,nk,.1)),T(pel),R(.5+.12*w),R(.47+.1*w)),Pn]);
-    const a=T(chest),gr=g.createLinearGradient(a[0]-R(.7),0,a[0]+R(.7),0);
-    const lit=front||face<0; gr.addColorStop(0,lit?shade(J,1.12):Js); gr.addColorStop(.5,J); gr.addColorStop(1,lit?Js:shade(J,1.12));
-    out.push([capsule(a,T(lerp2(pel,nk,.12)),R(.6+.15*w),R(.47+.1*w)),gr]);
-    out.push([capsule(T(nk),T(lerp2(nk,hd,.55)),R(.15),R(.15)),skS]);
-    out.push([ell(T(hd),R(.36),R(.42)),sk]);
-    return out; };
-  const headwear=()=>{
-    const c=T(P.head),out=[],r=R(opt.helmet?.45:.4),cy=c[1]-R(.06);
-    const dome=new Path2D(); dome.arc(c[0],cy,r,Math.PI,0,false); dome.lineTo(c[0]+r,cy+R(.06)); dome.lineTo(c[0]-r,cy+R(.06)); dome.closePath();
-    out.push([dome,Cp]);
-    if(front) out.push([ell([c[0],cy+R(.04)],r*1.08,R(.1)),shade(Cp,.65)]);
-    else out.push([ell([c[0]+face*R(.42),cy+R(.03)],R(.27),R(.075)),shade(Cp,.65)]);
-    if(opt.helmet&&!front) out.push([ell([c[0]-face*R(.1),c[1]+R(.05)],R(.24),R(.28)),Cp]);
-    return out; };
-  const farLegFirst=front?[]:[leg(P.hipF,P.kF,P.aF,true)];
-  if(opt.pre) opt.pre(T,g);
-  if(!front&&!opt.leadOver){ layer(arm(P.sF,P.eF,P.hF,true,opt.glove==='F')); }
-  farLegFirst.forEach(layer);
-  if(front) layer([...leg(P.hipF,P.kF,P.aF,false),...leg(P.hipN,P.kN,P.aN,false)]);
-  else layer(leg(P.hipN,P.kN,P.aN,false));
-  layer([...body(),...headwear()]);
-  // details: belt, chest lettering, eyes, helmet shine
-  const pel=T(P.pel),nk=T(P.neck),bw=R(front?.58:.48),by=lerp2(pel,nk,.14);
-  g.fillStyle=INK; g.fillRect(by[0]-bw,by[1]-R(.07),bw*2,R(.14));
-  const ch=T(lerp2(P.pel,P.neck,.62));
-  g.fillStyle=Pn; if(front) g.fillRect(ch[0]-R(.28),ch[1]-R(.09),R(.56),R(.17)); else g.fillRect(ch[0]+face*R(.18)-R(.12),ch[1]-R(.1),R(.24),R(.2));
-  const hc=T(P.head);
-  if(s>4){ g.fillStyle=INK; if(front){ g.fillRect(hc[0]-R(.17),hc[1]-R(.02),R(.09),R(.09)); g.fillRect(hc[0]+R(.08),hc[1]-R(.02),R(.09),R(.09)); }
-    else g.fillRect(hc[0]+face*R(.2)-R(.05),hc[1]-R(.03),R(.1),R(.1)); }
-  if(opt.helmet&&s>8){ g.fillStyle='rgba(255,255,255,.45)'; g.beginPath(); g.ellipse(hc[0]-face*R(.12),hc[1]-R(.36),R(.16),R(.06),-.3*face,0,7); g.fill(); }
-  if(front){ if(opt.mid) opt.mid(T,g); layer([...arm(P.sF,P.eF,P.hF,false,opt.glove==='F'),...arm(P.sN,P.eN,P.hN,false,opt.glove==='N')]); }
-  else { if(opt.mid) opt.mid(T,g); if(opt.leadOver) layer(arm(P.sF,P.eF,P.hF,false,false));
-    if(opt.handsTop) layer([[ell(T(P.hF),R(.16),R(.16)),'#d8cfba']]);
-    layer(arm(P.sN,P.eN,P.hN,false,opt.glove==='N')); }
-  if(opt.ball){ const b=T(P.hN); g.fillStyle='#fff'; g.beginPath(); g.arc(b[0],b[1],R(.13),0,7); g.fill(); }
-}
-
-/* field & background players: posed, pre-rendered and cached per team, skin, frame and scale */
-const FP={
-  stand:{front:true,pel:[0,2.65],neck:[0,4.45],head:[0,5.05],sN:[-.55,4.25],eN:[-.72,3.5],hN:[-.55,2.9],sF:[.55,4.25],eF:[.72,3.55],hF:[.5,3.05],
-    hipN:[-.28,2.6],kN:[-.4,1.4],aN:[-.44,.22],hipF:[.28,2.6],kF:[.4,1.4],aF:[.44,.22]},
-  runA:{pel:[0,2.75],neck:[.3,4.45],head:[.42,5.02],sN:[.15,4.25],eN:[.5,3.6],hN:[.9,3.95],sF:[.15,4.25],eF:[-.25,3.6],hF:[-.55,3.15],
-    hipN:[0,2.7],kN:[.55,1.75],aN:[.45,.55],hipF:[0,2.7],kF:[-.35,1.55],aF:[-.95,.95]},
-  runB:{pel:[0,2.9],neck:[.3,4.6],head:[.42,5.17],sN:[.15,4.4],eN:[.25,3.7],hN:[.5,3.45],sF:[.15,4.4],eF:[.05,3.7],hF:[.3,3.4],
-    hipN:[0,2.85],kN:[.4,2.0],aN:[.05,1.25],hipF:[0,2.85],kF:[.15,1.5],aF:[0,.25]},
-  throw:{pel:[0,2.7],neck:[-.1,4.5],head:[-.12,5.08],sN:[-.15,4.3],eN:[-.6,4.6],hN:[-.95,5.15],sF:[.15,4.35],eF:[.6,4.2],hF:[.95,4.0],
-    hipN:[-.1,2.65],kN:[-.6,1.45],aN:[-.95,.25],hipF:[.1,2.65],kF:[.6,1.45],aF:[.95,.25]},
-};
-FP.runC=swapSides(FP.runA); FP.runD=swapSides(FP.runB);
-const fist=p=>({...p,eN:[.35,4.95],hN:[.4,5.75]});
-FP.hrA=fist(FP.runA); FP.hrB=fist(FP.runB); FP.hrC=fist(FP.runC); FP.hrD=fist(FP.runD);
+/* field players and runners: the hand-drawn field frames, cached per team, skin, frame and scale */
 const sprCache=new Map();
 function spr(team,skin,frame,flip,glove,k=1){
-  const key=team.abbr+team.jersey+team.cap+team.pants+skin+frame+(flip?1:0)+(glove?1:0)+k; let c=sprCache.get(key); if(c) return c;
-  // R.B.I.-style NES sprite: the FP pose on a chunky pixel grid (1 art pixel = 1 game pixel), big capped head, flat colours, black outline
-  const u=k*3.3,w=Math.max(6,Math.round(22*k)),h=Math.max(7,Math.round(24*k)),ox=w/2,oy=h-1.5,P=FP[frame],kt=kit8(team,skin);
-  const q=p=>[ox+p[0]*u,oy-p[1]*u],L=(a,b,r0,r1,c,sep)=>({k:'line',p:[q(a),q(b)],r0:r0*k,r1:r1*k,c,sep}),parts=[],front=!!P.front;
-  const leg=(hip,kn,an,far)=>{ const toe=[an[0]+(front?(an[0]<0?-.25:.25):.5),an[1]-.05];
-    const sk=lerp2(kn,an,.55); parts.push(L(hip,kn,1.5,1.25,far?kt.panD:kt.pan),L(kn,sk,1.25,1.1,far?kt.panD:kt.pan),L(sk,an,1.05,.95,far?kt.capD:kt.cap),L(an,toe,1,.9,kt.shoe)); };
-  const arm=(sh,el,hd,far,gl)=>{ parts.push(L(sh,el,1.15,1,far?kt.jerD:kt.jer,1),L(el,hd,.95,.85,far?kt.skinD:kt.skin,1));
-    if(gl) parts.push({k:'disc',x:q(hd)[0],y:q(hd)[1],r:1.4*k,c:kt.mitt,sep:1}); };
-  const torso=()=>{ const n=q(P.neck),pl=q(P.pel),hw=(front?2.9:2.2)*k;
-    parts.push({k:'poly',p:[[n[0]-hw,n[1]],[n[0]+hw,n[1]],[pl[0]+hw*.85,pl[1]+.5],[pl[0]-hw*.85,pl[1]+.5]],c:kt.jer});
-    parts.push({k:'rect',x:Math.round(pl[0]-hw*.85),y:Math.round(pl[1]),w:Math.round(hw*1.7)+1,h:1,c:kt.pan}); };
-  const head=()=>{ const c=q([P.head[0]+(front?0:.1),P.head[1]+.4]),hr=2.7*k,dir=front?0:1;
-    parts.push({k:'disc',x:c[0],y:c[1]+.3*k,r:hr,c:kt.skin});
-    parts.push({k:'disc',x:c[0]-dir*.4*k,y:c[1]-.5*k,r:hr*1.05,c:kt.cap,maxY:Math.round(c[1]-.4*k)});
-    if(front) parts.push({k:'rect',x:Math.round(c[0]-hr),y:Math.round(c[1]-.4*k),w:Math.round(hr*2)+1,h:Math.max(1,Math.round(.6*k)),c:kt.capD});
-    else parts.push({k:'rect',x:Math.round(c[0]),y:Math.round(c[1]-.4*k),w:Math.round(hr*1.6)+1,h:Math.max(1,Math.round(.6*k)),c:kt.capD});
-    if(k>=.8){ if(front) parts.push({k:'px',pts:[[Math.round(c[0]-.8*k),Math.round(c[1]+.6*k),ART_INK],[Math.round(c[0]+.8*k),Math.round(c[1]+.6*k),ART_INK]]});
-      else parts.push({k:'px',pts:[[Math.round(c[0]+1.1*k),Math.round(c[1]+.6*k),ART_INK]]}); } };
-  if(front){ leg(P.hipF,P.kF,P.aF,false); leg(P.hipN,P.kN,P.aN,false); torso(); arm(P.sF,P.eF,P.hF,false,glove); arm(P.sN,P.eN,P.hN,false,false); head(); }
-  else { arm(P.sF,P.eF,P.hF,true,glove); leg(P.hipF,P.kF,P.aF,true); leg(P.hipN,P.kN,P.aN,false); torso(); arm(P.sN,P.eN,P.hN,false,false); head(); }
-  c=pixelSprite(w,h,parts,flip,false);
-  c.lw=w; c.lh=h; c.ax=ox; c.ay=oy; sprCache.set(key,c); return c;
+  const f={runC:'runA',runD:'runB',hrC:'hrA',hrD:'hrB'}[frame]||frame,key='F'+f+team.abbr+team.jersey+team.cap+skin+(flip?1:0)+(glove?1:0)+k; let c=sprCache.get(key);
+  if(c) return c;
+  const a=artSprite('fld',f,team,skin,flip,!glove);
+  c={img:a,lw:a.width*k,lh:a.height*k,ax:(a.width/2)*k,ay:(a.height-1)*k}; sprCache.set(key,c); return c;
 }
-function drawSpr(c,x,y){ ctx.drawImage(c,snap(x-c.ax),snap(y-c.ay),c.lw,c.lh); }
-
-/* batter (side view, facing the plate) */
-const BP={
-  stance:{pel:[-.05,2.8],neck:[.08,4.55],head:[.15,5.12],sN:[-.3,4.38],eN:[-.82,4.15],hN:[-.45,4.75],sF:[.32,4.42],eF:[.42,3.9],hF:[-.33,4.62],
-    hipN:[-.2,2.78],kN:[-.75,1.55],aN:[-1.0,.25],hipF:[.1,2.78],kF:[.8,1.5],aF:[.98,.25]},
-  contact:{pel:[.05,2.72],neck:[.12,4.5],head:[.2,5.08],sN:[-.12,4.33],eN:[.22,3.55],hN:[.88,3.8],sF:[.42,4.38],eF:[.68,4.06],hF:[1.0,3.75],
-    hipN:[-.08,2.7],kN:[-.4,1.35],aN:[-.95,.35],hipF:[.2,2.72],kF:[.9,1.5],aF:[1.05,.25]},
-  follow:{pel:[.08,2.75],neck:[.15,4.5],head:[.22,5.08],sN:[-.02,4.35],eN:[.58,4.12],hN:[.5,4.75],sF:[.45,4.4],eF:[.85,4.45],hF:[.42,4.88],
-    hipN:[-.02,2.72],kN:[-.25,1.45],aN:[-.8,.45],hipF:[.22,2.75],kF:[.88,1.52],aF:[1.05,.25]},
-  bunt:{pel:[0,2.7],neck:[.15,4.45],head:[.25,5.0],sN:[-.12,4.3],eN:[.3,3.7],hN:[.55,3.9],sF:[.42,4.35],eF:[.7,3.85],hF:[1.0,3.95],
-    hipN:[-.15,2.7],kN:[-.55,1.45],aN:[-.85,.25],hipF:[.15,2.7],kF:[.75,1.45],aF:[.9,.25]},
-};
-const batAngle=ph=>(ph<.45?115-120*(ph/.45):-5-190*((ph-.45)/.55))*Math.PI/180;
-function batPose(ph){ return ph<.45?lerpPose(BP.stance,BP.contact,ph/.45):lerpPose(BP.contact,BP.follow,(ph-.45)/.55); }
-// draw into a low-res buffer, snap alpha to on/off, then blow it up with hard pixel edges
-const PXC=document.createElement('canvas'),PXG=PXC.getContext('2d',{willReadFrequently:true});
-function pixelBlit(x,y,w,h,px,draw){
-  const x0=Math.floor(x/px)*px,y0=Math.floor(y/px)*px,cw=Math.ceil(w/px)+1,ch=Math.ceil(h/px)+1;
-  if(PXC.width<cw||PXC.height<ch){ PXC.width=Math.max(PXC.width,cw); PXC.height=Math.max(PXC.height,ch); }
-  PXG.setTransform(1,0,0,1,0,0); PXG.clearRect(0,0,cw,ch);
-  PXG.setTransform(1/px,0,0,1/px,-x0/px,-y0/px); draw(PXG);
-  const img=PXG.getImageData(0,0,cw,ch),d=img.data; for(let i=3;i<d.length;i+=4) d[i]=d[i]>=110?255:0;
-  PXG.putImageData(img,0,0); ctx.drawImage(PXC,0,0,cw,ch,x0,y0,cw*px,ch*px);
-}
-// bat swings in 3D (yaw around the body, elevation), projected onto the screen
-const BATK=[[0,180,65],[.25,100,25],[.45,0,-5],[.65,-90,15],[1,-200,50]];
-function batDir(ph,bunt){
-  if(bunt) return {dx:.99,dy:.14,yaw:0};
-  let i=0; while(i<BATK.length-2&&ph>BATK[i+1][0]) i++;
-  const a=BATK[i],b=BATK[i+1],t=clamp((ph-a[0])/(b[0]-a[0]),0,1),yaw=a[1]+(b[1]-a[1])*t,el=(a[2]+(b[2]-a[2])*t)*Math.PI/180;
-  return {dx:Math.cos(el)*Math.cos(yaw*Math.PI/180),dy:Math.sin(el),yaw};
-}
-function batterPose(phase,bunt){
-  const P0=bunt?BP.bunt:batPose(phase),bd=batDir(phase,bunt),grip=lerp2(P0.hN,P0.hF,.5),sp=bunt?.9:.3;
-  return {P:{...P0,hF:grip,hN:[grip[0]+bd.dx*sp,grip[1]+bd.dy*sp]},grip,bd};
-}
-/* pitcher (front view, facing the plate) */
-const PPOSE={
-  set:{front:true,pel:[0,2.8],neck:[0,4.6],head:[0,5.18],sN:[-.55,4.4],eN:[-.62,3.6],hN:[-.05,3.55],sF:[.55,4.4],eF:[.62,3.6],hF:[.1,3.58],
-    hipN:[-.3,2.75],kN:[-.33,1.45],aN:[-.38,.25],hipF:[.3,2.75],kF:[.33,1.45],aF:[.38,.25]},
-  kick:{front:true,pel:[-.05,2.85],neck:[-.08,4.65],head:[-.08,5.23],sN:[-.6,4.45],eN:[-.66,3.9],hN:[-.06,4.2],sF:[.5,4.45],eF:[.58,3.9],hF:[.08,4.22],
-    hipN:[-.3,2.8],kN:[-.33,1.5],aN:[-.38,.25],hipF:[.25,2.8],kF:[.8,2.75],aF:[.55,1.75]},
-  cock:{front:true,pel:[.05,2.6],neck:[0,4.4],head:[-.02,4.98],sN:[-.6,4.25],eN:[-1.2,4.3],hN:[-1.25,5.05],sF:[.55,4.3],eF:[.78,3.9],hF:[.35,3.95],
-    hipN:[-.25,2.6],kN:[-.5,1.35],aN:[-.45,.25],hipF:[.3,2.6],kF:[.75,1.45],aF:[.85,.25]},
-  follow:{front:true,pel:[.1,2.5],neck:[.25,4.0],head:[.3,4.55],sN:[-.25,3.95],eN:[-.02,3.25],hN:[.55,2.75],sF:[.7,4.0],eF:[.88,3.35],hF:[.45,3.55],
-    hipN:[-.2,2.5],kN:[-.6,1.55],aN:[-.75,.85],hipF:[.35,2.5],kF:[.6,1.35],aF:[.75,.25]},
-};
-// arm comes over the top in front of the cap at release
-PPOSE.release={...lerpPose(PPOSE.cock,PPOSE.follow,.35),eN:[-.75,4.75],hN:[-.25,5.3]};
-/* ---------- 8-bit batting-screen sprites ----------
-   Built like NES sprites: a tiny pixel grid, a few flat colors, a hard 1-px black outline,
-   and a handful of key poses that snap from one to the next. */
+function drawSpr(c,x,y){ ctx.drawImage(c.img||c,snap(x-c.ax),snap(y-c.ay),c.lw,c.lh); }
 const ART_INK='#0d0b10';
-function discPx(cx,cy,r,fn){ if(r<.6){ fn(Math.round(cx),Math.round(cy)); return; }
-  for(let y=Math.floor(cy-r);y<=Math.ceil(cy+r);y++) for(let x=Math.floor(cx-r);x<=Math.ceil(cx+r);x++) if((x-cx)*(x-cx)+(y-cy)*(y-cy)<=r*r+.15) fn(x,y); }
-function inPoly(x,y,P){ let c=false; for(let i=0,j=P.length-1;i<P.length;j=i++){ const [xi,yi]=P[i],[xj,yj]=P[j]; if(((yi>y)!==(yj>y))&&(x<(xj-xi)*(y-yi)/(yj-yi)+xi)) c=!c; } return c; }
-const shadeMemo=new Map(),shadeC=(c,f)=>{ const key=c+f; let v=shadeMemo.get(key); if(!v){ v=shade(c,f); shadeMemo.set(key,v); } return v; };
-function pixelSprite(w,h,parts,flip,lit,flat){
-  const id=new Int16Array(w*h).fill(-1),col=new Array(w*h);
-  const put=(x,y,c,i,maxY)=>{ x=Math.round(x); y=Math.round(y); if(x<0||y<0||x>=w||y>=h||(maxY!==undefined&&y>maxY)) return; id[y*w+x]=i; col[y*w+x]=c; };
-  parts.forEach((p,i)=>{
-    if(p.k==='rect'){ for(let y=p.y;y<p.y+p.h;y++) for(let x=p.x;x<p.x+p.w;x++) put(x,y,p.c,i); }
-    else if(p.k==='disc') discPx(p.x,p.y,p.r,(x,y)=>put(x,y,p.c,i,p.maxY));
-    else if(p.k==='line'){ const [a,b]=p.p,n=Math.ceil(hyp(b[0]-a[0],b[1]-a[1])*3)+1;
-      for(let s=0;s<=n;s++){ const t=s/n; discPx(a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,p.r0+(p.r1-p.r0)*t,(x,y)=>put(x,y,p.c,i)); } }
-    else if(p.k==='poly'){ const xs=p.p.map(q=>q[0]),ys=p.p.map(q=>q[1]);
-      for(let y=Math.floor(Math.min(...ys));y<=Math.ceil(Math.max(...ys));y++) for(let x=Math.floor(Math.min(...xs));x<=Math.ceil(Math.max(...xs));x++)
-        if(inPoly(x+.5,y+.5,p.p)) put(x,y,(p.shadeX!==undefined&&x<p.shadeX)?p.c2:p.c,i); }
-    else if(p.k==='px') for(const [x,y,c] of p.pts) put(x,y,c||p.c,i);
-  });
-  const out=col.slice(),N=[[1,0],[-1,0],[0,1],[0,-1]];
-  // rim lighting (hi-res sprites): light from the upper left, so each colour area gets a bright top-left edge and a dark bottom-right one
-  if(lit) for(let y=0;y<h;y++) for(let x=0;x<w;x++){ const i=id[y*w+x]; if(i<0||parts[i].flat) continue; const c=col[y*w+x]; if(c===ART_INK) continue;
-    // small painted details (eyes, piping, logos) don't count as edges of the shape underneath
-    const edge=(xx,yy)=>{ if(xx<0||yy<0||xx>=w||yy>=h) return true; const j=id[yy*w+xx]; return j<0||(col[yy*w+xx]!==c&&!parts[j].flat); };
-    const hi=edge(x-1,y)||edge(x,y-1),lo=edge(x+1,y)||edge(x,y+1);
-    if(lo&&!hi) out[y*w+x]=shadeC(c,.78); else if(hi&&!lo) out[y*w+x]=shadeC(c,1.18); }
-  // parts flagged "sep" get a dark line where they cross over earlier parts (arm over chest, etc.)
-  if(!flat) for(let y=0;y<h;y++) for(let x=0;x<w;x++){ const i=id[y*w+x]; if(i<0||!parts[i].sep) continue;
-    for(const [dx,dy] of N){ const nx=x+dx,ny=y+dy; if(nx<0||ny<0||nx>=w||ny>=h) continue; const j=id[ny*w+nx]; if(j>=0&&j<i&&!parts[j].noSep) out[ny*w+nx]=ART_INK; } }
-  // hard silhouette outline
-  if(!flat) for(let y=0;y<h;y++) for(let x=0;x<w;x++){ if(id[y*w+x]>=0) continue;
-    for(const [dx,dy] of N){ const nx=x+dx,ny=y+dy; if(nx>=0&&ny>=0&&nx<w&&ny<h&&id[ny*w+nx]>=0){ out[y*w+x]=ART_INK; break; } } }
-  const c=document.createElement('canvas'); c.width=w; c.height=h; const g=c.getContext('2d');
-  for(let y=0;y<h;y++) for(let x=0;x<w;x++){ const v=out[y*w+x]; if(!v) continue; g.fillStyle=v; g.fillRect(flip?w-1-x:x,y,1,1); }
-  return c;
-}
-function kit8(t,skin){ return {cap:t.cap,capD:shade(t.cap,.62),cap2:shade(t.cap,1.35),jer:t.jersey,jerD:shade(t.jersey,.68),pan:t.pants,panD:shade(t.pants,.76),
-  skin,skinD:shade(skin,.78),shoe:'#26212c',bat:'#dba45c',batD:'#93602f',batH:'#f3cf8e',glv:'#f2ece0',mitt:'#7b4a22',mittD:'#4f2c12',lace:'#c8a070'}; }
-// u scales the NES-size art grid (2 = the hi-res batting-screen sprites, which also get piping, stirrups and shoe stripes)
-const qU=(p,u)=>[p[0]*u,p[1]*u];
-function leg8(P,hip,knee,ank,k,far,toeDir=1,bk=1,u=1){
-  const q=p=>qU(p,u),pc=far?k.panD:k.pan,sc=far?k.capD:k.cap,mid=lerp2(knee,ank,.45),toe=[ank[0]+2.6*toeDir,ank[1]+.6];
-  P.push({k:'line',p:[q(hip),q(knee)],r0:1.5*bk*u,r1:1.15*bk*u,c:pc},{k:'line',p:[q(knee),q(mid)],r0:1.1*bk*u,r1:1*bk*u,c:pc},
-         {k:'line',p:[q(mid),q(ank)],r0:.95*bk*u,r1:.85*bk*u,c:sc},{k:'line',p:[q(ank),q(toe)],r0:.95*bk*u,r1:.8*bk*u,c:k.shoe});
-  if(u>1) P.push({k:'line',p:[q(lerp2(hip,knee,.15)),q(lerp2(knee,mid,.7))],r0:.4,r1:.4,c:far?k.capD:k.cap,flat:1},
-    {k:'line',p:[q(lerp2(mid,ank,.62)),q(lerp2(mid,ank,.8))],r0:.88*bk*u,r1:.84*bk*u,c:far?'#bdb6aa':'#ece6da'},
-    {k:'line',p:[q(lerp2(ank,toe,.2)),q(lerp2(ank,toe,.8))],r0:.45,r1:.45,c:'#e8e2d4',flat:1});
-}
-function arm8(P,sh,el,hd,k,far,sep,bk=1,u=1){
-  const q=p=>qU(p,u);
-  P.push({k:'line',p:[q(sh),q(el)],r0:1.15*bk*u,r1:.95*bk*u,c:far?k.jerD:k.jer,sep},{k:'line',p:[q(el),q(hd)],r0:.85*bk*u,r1:.75*bk*u,c:far?k.skinD:k.skin,sep});
-  if(u>1) P.push({k:'line',p:[q(lerp2(sh,el,.68)),q(lerp2(sh,el,.78))],r0:1.02*bk*u,r1:.98*bk*u,c:far?k.capD:k.cap,sep});   // sleeve trim
-}
-// batter key poses, art pixels (canvas 44x42, ground at y=39), right-handed, facing the plate (to the right)
-const BAT8={
-  stance:{head:[15,9],neck:[14,13],torso:[[12,13],[18,13],[17,23],[12,23]],sB:[13,15],eB:[8,17],sF:[17,15],eF:[16,20],grip:[10,10],tip:[6,0],
-    hipB:[13,24],kB:[10,31],aB:[9,37],hipF:[16,24],kF:[20,31],aF:[22,37]},
-  load:{head:[14,9],neck:[13,13],torso:[[11,13],[17,13],[16,23],[11,23]],sB:[12,15],eB:[7,16],sF:[16,15],eF:[14,20],grip:[8,11],tip:[3,2],
-    hipB:[12,24],kB:[9,31],aB:[9,37],hipF:[15,24],kF:[19,29],aF:[21,35]},
-  contact:{head:[17,9],neck:[16,13],torso:[[14,13],[20,13],[19,23],[14,23]],sB:[15,15],eB:[19,21.5],sF:[19,15],eF:[23,19],grip:[26,21.5],tip:[41,21.5],
-    hipB:[15,24],kB:[16,31],aB:[12,36],hipF:[18,24],kF:[22,31],aF:[23,37]},
-  extend:{head:[17,9],neck:[16,13],torso:[[14,13],[20,13],[19,23],[14,23]],sB:[16,15],eB:[21,16],sF:[19,15],eF:[23,14],grip:[25,12],tip:[31,4],
-    hipB:[15,24],kB:[17,31],aB:[13,36],hipF:[18,24],kF:[22,31],aF:[23,37]},
-  follow:{head:[17,9],neck:[16,13],torso:[[14,13],[20,13],[19,23],[14,23]],sB:[16,15],eB:[22,13],sF:[19,15],eF:[23,10],grip:[18,7],tip:[5,3],behind:1,
-    hipB:[15,24],kB:[17,31],aB:[14,36],hipF:[18,24],kF:[22,31],aF:[23,37]},
-  bunt:{head:[17,9],neck:[16,13],torso:[[13,13],[19,13],[18,23],[13,23]],sB:[14,15],eB:[19,19.5],sF:[18,15],eF:[21,20.5],grip:[22,21],hB:[28,20.5],tip:[34,20.5],butt:[19,21],
-    hipB:[14,24],kB:[13,31],aB:[12,37],hipF:[17,24],kF:[20,31],aF:[21,37]},
-};
-function batterParts(J,k,u=1){
-  const P=[],q=p=>qU(p,u),R=Math.round,hB=J.hB||[J.grip[0]+.8,J.grip[1]-.8],blk=(x,y,c)=>({k:'rect',x:R(x*u),y:R(y*u),w:u,h:u,c});
-  const bat=()=>{ const b0=J.butt||J.grip; P.push({k:'line',p:[q(b0),q(J.tip)],r0:.55*u,r1:1.05*u,c:k.bat,noSep:1},{k:'line',p:[q(b0),q(lerp2(b0,J.tip,.3))],r0:.5*u,r1:.55*u,c:k.batD,noSep:1});
-    if(u>1){ const kn=lerp2(b0,J.tip,-.035); P.push({k:'disc',x:kn[0]*u,y:kn[1]*u,r:.75*u,c:k.batD,noSep:1},{k:'line',p:[q(lerp2(b0,J.tip,.4)),q(lerp2(b0,J.tip,.93))],r0:.3,r1:.45,c:k.batH,noSep:1,flat:1}); } };
-  if(J.behind) bat();
-  const tcx=(J.torso[0][0]+J.torso[1][0]+J.torso[2][0]+J.torso[3][0])/4,TO=J.torso.map(([x,y],i)=>[tcx+(x-tcx)*1.35,y+(i<2?-.5:0)]);
-  leg8(P,J.hipB,J.kB,J.aB,k,true,1,1.3,u); leg8(P,J.hipF,J.kF,J.aF,k,false,1,1.3,u);
-  P.push({k:'poly',p:TO.map(q),c:k.jer,c2:k.jerD,shadeX:(TO[0][0]+2.5)*u});
-  if(u>1){ // button placket down the front of the jersey, a belt with a buckle, a chest logo
-    P.push({k:'line',p:[q(lerp2(TO[1],TO[2],.08)),q(lerp2(TO[1],TO[2],.92))],r0:.45,r1:.45,c:k.cap,flat:1});
-    P.push({k:'rect',x:R(TO[3][0]*u),y:R(TO[3][1]*u)-u,w:R((TO[2][0]-TO[3][0])*u)+1,h:u,c:'#1d1922',flat:1},{k:'rect',x:R(TO[2][0]*u)-3,y:R(TO[3][1]*u)-u,w:2,h:u,c:'#c9b67a',flat:1});
-    const lx=J.torso[1][0]-3,ly=J.torso[1][1]+3.6; P.push({k:'rect',x:R(lx*u),y:R(ly*u),w:2*u+1,h:u+1,c:k.cap2,flat:1});
-  } else {
-    P.push({k:'rect',x:R(TO[3][0]),y:R(TO[3][1])-1,w:R(TO[2][0]-TO[3][0])+1,h:1,c:ART_INK});
-    P.push({k:'px',pts:[[R(J.torso[1][0])-2,R(J.torso[1][1])+4,k.pan],[R(J.torso[1][0])-3,R(J.torso[1][1])+4,k.pan]]}); }
-  P.push({k:'line',p:[q(J.neck),q(J.head)],r0:u,r1:u,c:k.skinD},{k:'disc',x:J.head[0]*u,y:J.head[1]*u,r:3*u,c:k.skin});
-  // batting helmet: dome, brim, ear flap, shine; eye
-  P.push({k:'disc',x:(J.head[0]-.6)*u,y:(J.head[1]-.7)*u,r:3.5*u,c:k.cap,maxY:R(J.head[1]*u)+(u>1?1:0)},
-         {k:'rect',x:R(J.head[0]*u)+u,y:R(J.head[1]*u)-u,w:4*u,h:u,c:k.capD},
-         {k:'disc',x:(J.head[0]-2)*u,y:(J.head[1]+.6)*u,r:1.3*u,c:k.cap});
-  if(u>1) P.push({k:'rect',x:R((J.head[0]-1.6)*u),y:R((J.head[1]-3.4)*u),w:3,h:1,c:'#ffffff',flat:1},{k:'rect',x:R((J.head[0]-2.2)*u),y:R((J.head[1]-2.8)*u),w:1,h:2,c:k.cap2,flat:1},
-    {k:'rect',x:R((J.head[0]+1.7)*u),y:R((J.head[1]+.8)*u),w:1,h:2,c:ART_INK,flat:1},{k:'rect',x:R((J.head[0]+2.6)*u),y:R((J.head[1]+1.6)*u),w:1,h:1,c:k.skinD,flat:1},
-    {k:'rect',x:R((J.head[0]+1.4)*u),y:R((J.head[1]+2.4)*u),w:2,h:1,c:k.skinD,flat:1});
-  else P.push({k:'px',pts:[[R(J.head[0])-1,R(J.head[1])-3,k.cap2],[R(J.head[0]),R(J.head[1])-3,k.cap2],[R(J.head[0])+2,R(J.head[1])+1,ART_INK]]});
-  arm8(P,J.sF,J.eF,J.grip,k,false,1,1.3,u);
-  if(!J.behind) bat();
-  P.push({k:'disc',x:J.grip[0]*u,y:J.grip[1]*u,r:1.3*u,c:k.glv,sep:1},{k:'disc',x:hB[0]*u,y:hB[1]*u,r:1.3*u,c:k.glv,sep:1});
-  arm8(P,J.sB,J.eB,hB,k,false,1,1.3,u);
-  return P;
-}
-// pitcher key poses, front view (canvas 26x30, ground at y=28); throwing arm is screen-left
-const PIT8={
-  set:{head:[13,5],torso:[[10,9],[16,9],[15,17],[11,17]],sL:[10,10],eL:[9,14],hL:[12,14],sR:[16,10],eR:[17,14],hR:[14,14],
-    hipL:[11,18],kL:[11,23],aL:[11,27],hipR:[15,18],kR:[15,23],aR:[15,27]},
-  kick:{head:[12,5],torso:[[9,9],[15,9],[14,17],[10,17]],sL:[9,10],eL:[7,13],hL:[11,11],sR:[15,10],eR:[16,13],hR:[13,11],
-    hipL:[10,18],kL:[10,23],aL:[10,27],hipR:[14,18],kR:[18,16],aR:[17,21]},
-  cock:{head:[13,6],torso:[[10,10],[16,10],[15,18],[11,18]],sL:[10,11],eL:[6,11],hL:[6,6],sR:[16,11],eR:[18,13],hR:[16,14],
-    hipL:[11,19],kL:[9,23],aL:[9,27],hipR:[15,19],kR:[18,22],aR:[20,27]},
-  release:{head:[14,7],torso:[[11,11],[17,11],[16,19],[12,19]],sL:[11,12],eL:[9,8],hL:[12,4],sR:[17,12],eR:[18,15],hR:[16,16],
-    hipL:[12,20],kL:[10,23],aL:[8,26],hipR:[16,20],kR:[18,23],aR:[19,27]},
-  follow:{head:[15,9],torso:[[12,12],[18,12],[17,20],[13,20]],sL:[12,13],eL:[14,17],hL:[18,20],sR:[18,13],eR:[19,16],hR:[17,15],
-    hipL:[13,21],kL:[9,22],aL:[6,23],hipR:[17,21],kR:[18,24],aR:[19,27]},
-};
-function pitcherParts(J,k,ball,u=1){
-  const P=[],q=p=>qU(p,u),R=Math.round;
-  leg8(P,J.hipL,J.kL,J.aL,k,false,-.4,1.1,u); leg8(P,J.hipR,J.kR,J.aR,k,false,.4,1.1,u);
-  P.push({k:'poly',p:J.torso.map(q),c:k.jer,c2:k.jerD,shadeX:(J.torso[0][0]+1)*u});
-  const cx=(J.torso[0][0]+J.torso[1][0])/2,cy=J.torso[0][1]+3;
-  if(u>1){ P.push({k:'rect',x:R(J.torso[3][0]*u),y:R(J.torso[3][1]*u)-u,w:R((J.torso[2][0]-J.torso[3][0])*u)+1,h:u,c:'#1d1922',flat:1},{k:'rect',x:R(cx*u)-1,y:R(J.torso[3][1]*u)-u,w:2,h:u,c:'#c9b67a',flat:1});
-    P.push({k:'rect',x:R((cx-2)*u),y:R(cy*u)-1,w:4*u,h:u,c:k.pan,flat:1},{k:'rect',x:R((cx-2)*u)+1,y:R(cy*u)-1+u,w:4*u-2,h:1,c:k.cap,flat:1},
-      {k:'line',p:[q([cx-1,J.torso[0][1]+.2]),q([cx,J.torso[0][1]+1.2])],r0:.45,r1:.45,c:k.cap,flat:1},{k:'line',p:[q([cx+1,J.torso[0][1]+.2]),q([cx,J.torso[0][1]+1.2])],r0:.45,r1:.45,c:k.cap,flat:1}); }
-  else { P.push({k:'rect',x:R(J.torso[3][0]),y:R(J.torso[3][1])-1,w:R(J.torso[2][0]-J.torso[3][0])+1,h:1,c:ART_INK});
-    P.push({k:'px',pts:[[R(cx)-2,R(cy),k.pan],[R(cx)-1,R(cy),k.pan],[R(cx),R(cy),k.pan],[R(cx)+1,R(cy),k.pan]]}); }
-  if(u>1){ // hi-res head: neck, ears, a rounder face, small eyes, nose, mouth; cap with a front brim and a logo
-    const hx=J.head[0]*u,hy=J.head[1]*u+1,X=R(hx),Y=R(hy),ty=J.torso[0][1]*u;
-    P.push({k:'line',p:[[hx,hy+3],[hx,ty+.5]],r0:1.9,r1:2.3,c:k.skinD},
-      {k:'disc',x:hx-5.3,y:hy+.6,r:1.3,c:k.skinD},{k:'disc',x:hx+5.3,y:hy+.6,r:1.3,c:k.skinD},
-      {k:'disc',x:hx,y:hy,r:5.5,c:k.skin,sep:1},
-      {k:'disc',x:hx,y:hy-1.9,r:5.6,c:k.cap,maxY:Y-2},
-      {k:'rect',x:X-6,y:Y-2,w:13,h:2,c:k.capD},
-      {k:'rect',x:X-1,y:Y-6,w:2,h:2,c:k.cap2,flat:1},
-      {k:'rect',x:X-2,y:Y+1,w:1,h:1,c:ART_INK,flat:1},{k:'rect',x:X+2,y:Y+1,w:1,h:1,c:ART_INK,flat:1},
-      {k:'rect',x:X,y:Y+2,w:1,h:1,c:k.skinD,flat:1},{k:'rect',x:X-1,y:Y+3,w:3,h:1,c:shade(k.skin,.62),flat:1}); }
-  else { P.push({k:'disc',x:J.head[0],y:J.head[1],r:2.1,c:k.skin},{k:'disc',x:J.head[0],y:J.head[1]-.6,r:2.2,c:k.cap,maxY:R(J.head[1])-1},
-         {k:'rect',x:R(J.head[0])-2,y:R(J.head[1])-1,w:5,h:1,c:k.capD}); }
-  if(u===1) P.push({k:'px',pts:[[R(J.head[0])-1,R(J.head[1])+.4|0,ART_INK],[R(J.head[0])+1,R(J.head[1])+.4|0,ART_INK]]});
-  arm8(P,J.sR,J.eR,J.hR,k,false,1,1,u); P.push({k:'disc',x:J.hR[0]*u,y:J.hR[1]*u,r:1.5*u,c:k.mitt,sep:1});
-  if(u>1) P.push({k:'line',p:[[(J.hR[0]-1)*u,(J.hR[1]-.4)*u],[(J.hR[0]+1)*u,(J.hR[1]-.4)*u]],r0:.4,r1:.4,c:k.lace,flat:1},{k:'disc',x:(J.hR[0]+.4)*u,y:(J.hR[1]+.5)*u,r:.6*u,c:k.mittD,flat:1});
-  arm8(P,J.sL,J.eL,J.hL,k,false,1,1,u);
-  if(ball) P.push({k:'disc',x:J.hL[0]*u,y:J.hL[1]*u,r:.9*u,c:'#ffffff',sep:1});
-  return P;
-}
-const spr8Cache=new Map();
-function batterSprite(t,skin,frame,flip,num=0){
-  const key='RBI'+t.abbr+t.jersey+t.cap+t.pants+skin+frame+(flip?1:0); let c=spr8Cache.get(key);
-  if(!c){ c=pixelSprite(Math.ceil(43*RBI_S),Math.ceil(40*RBI_S),rbiBatterParts(BATR[frame],kit8(t,skin)),flip,false,true); spr8Cache.set(key,c); }
-  return c;
-}
-// R.B.I.'s pitcher is stocky: legs shortened below the hips, the upper body widened and lowered so his feet stay on the rubber
-function stockyPose(J){ const HY=18,f=([x,y],w=1)=>[13+(x-13)*w,y<=HY?y+2.8:HY+2.8+(y-HY)*.72],o={};
-  for(const k in J) o[k]=k==='torso'?J[k].map(p=>f(p,1.14)):k[0]==='s'?f(J[k],1.12):f(J[k]); return o; }
-function pitcherSprite(t,skin,frame,ball){
-  const key='P'+t.abbr+t.jersey+t.cap+t.pants+skin+frame+(ball?1:0); let c=spr8Cache.get(key);
-  if(!c){ c=pixelSprite(26*SPR_U,30*SPR_U,pitcherParts(stockyPose(PIT8[frame]),kit8(t,skin),ball,SPR_U),false,SPR_U>1); spr8Cache.set(key,c); }
-  return c;
-}
-// catcher, seen from behind in his crouch below the plate (R.B.I. style); art in hi-res pixels (1.5 game px each)
-function catcherParts(k,glove){
-  const L=(a,b,r0,r1,c,o={})=>({k:'line',p:[a,b],r0,r1,c,...o});
-  const P=[
-    L([12,19],[6.5,21.5],2.4,2.1,k.pan),L([20,19],[25.5,21.5],2.4,2.1,k.pan),                 // thighs out to the sides
-    L([6.5,21.5],[8.5,26],2,1.8,k.cap),L([25.5,21.5],[23.5,26],2,1.8,k.cap),                  // shin guards
-    L([8.5,26.2],[11,26.6],1.5,1.3,k.shoe),L([23.5,26.2],[21,26.6],1.5,1.3,k.shoe),
-    {k:'poly',p:[[8.5,10],[23.5,10],[22.5,20],[9.5,20]],c:k.jer,c2:k.jerD,shadeX:11},
-    L([10,11.5],[22,19],.5,.5,k.capD,{flat:1}),L([22,11.5],[10,19],.5,.5,k.capD,{flat:1}),       // chest-protector straps
-    {k:'rect',x:9,y:19,w:14,h:2,c:k.pan},
-    L([9.5,11.5],[6,15.5],1.7,1.5,k.jerD,{sep:1}),L([6,15.5],[7,20],1.4,1.3,k.skinD,{sep:1}),   // throwing hand tucked on his knee
-    {k:'disc',x:16,y:6.5,r:5,c:'#24202b'},{k:'rect',x:11,y:9,w:10,h:2,c:'#15121a'},             // dark catcher's helmet, mask straps
-    {k:'rect',x:14,y:3,w:2,h:2,c:'#ffffff',flat:1},
-    L([22.5,11.5],[26,8.5],1.7,1.5,k.jer,{sep:1}),                                            // glove arm up, mitt showing the target
-    {k:'disc',x:26.5,y:6.5,r:3.6,c:k.mitt,sep:1},{k:'disc',x:27.3,y:6,r:1.6,c:k.mittD,flat:1},
-  ];
-  return P;
-}
-function rbiCatcherParts(k){
-  return [{k:'disc',x:16,y:9,r:8.2,c:k.cap},{k:'rect',x:15,y:1,w:2,h:16,c:'#f0a050'},{k:'rect',x:8,y:9,w:16,h:2,c:'#f0a050'},
-    {k:'rect',x:6,y:13,w:20,h:2,c:k.capD},{k:'rect',x:12,y:16,w:8,h:2,c:k.skinD}];
-}
+function batterSprite(t,skin,frame,flip){ return artSprite('bat',frame==='extend'?'follow':frame,t,skin,flip); }
+function pitcherSprite(t,skin,frame){ return artSprite('pit',frame,t,skin,false); }
 function drawCatcher(t,skin){
-  const key='CR'+t.abbr+t.jersey+t.cap+t.pants+skin; let c=spr8Cache.get(key);
-  if(!c){ c=pixelSprite(32,26,rbiCatcherParts(kit8(t,skin)),false,false,true); spr8Cache.set(key,c); }
-  ctx.drawImage(c,128-16,216-17,32,26); return;   // only his head shows above the card, like the R.B.I. screen
-  ctx.drawImage(c,snap(128-16*1.15),snap(222-28*1.15),32*1.15,28*1.15);   // feet tuck behind the batter card
+  const c=artSprite('catcher','',t,skin,false);
+  ctx.drawImage(c,snap(128-c.width),snap(222-c.height*2),c.width*2,c.height*2);   // just his head shows above the batter card
 }
-// R.B.I.-style batter, seen from behind: grid 40x40 (NES units), feet centred at x 16 on y 38, right-handed (faces the plate to the right).
-// The contact frame holds the bat at grid y 16.3, which lands on the pitch's height (2.6 ft) at BATR_PX game px per unit.
-const BATR_PX=2.4,BATR={
-  stance:{head:[16,6.5],torso:[[10.5,11],[21.5,11],[20.5,22],[11.5,22]],sN:[11,12],eN:[9.5,15.5],sF:[21,12],eF:[19,15.5],grip:[13.5,14.5],hB:[13.5,12.8],tip:[12.8,-2],butt:[13.6,16],behind:1,
-    hipN:[13,22],kN:[10,29.5],aN:[9,37],hipF:[19,22],kF:[22,29.5],aF:[23,37]},
-  load:{head:[15.5,6.8],torso:[[10,11.3],[21,11.3],[20.5,22],[11.5,22]],sN:[10.5,12.3],eN:[8.5,15],sF:[20.5,12.3],eF:[17,15.5],grip:[12,14],hB:[11.8,12.3],tip:[8.5,-1.5],butt:[12.2,15.5],behind:1,
-    hipN:[13,22],kN:[10,29.5],aN:[9,37],hipF:[19,22],kF:[21.5,28],aF:[22.5,35.5]},
-  contact:{head:[18,7],torso:[[12,11.5],[23,11.5],[21.5,22],[12.5,22]],sN:[13,12.5],eN:[18,16],sF:[22,12.5],eF:[24.5,15],grip:[23.5,16.3],hB:[25.2,16.3],tip:[41,16.3],butt:[22.3,16.3],
-    hipN:[13.5,22],kN:[11,30],aN:[9.5,37],hipF:[20,22],kF:[24,29],aF:[25,37]},
-  extend:{head:[18,7],torso:[[12,11.5],[23,11.5],[21.5,22],[12.5,22]],sN:[13,12.5],eN:[19,14],sF:[22,12.5],eF:[25,12.5],grip:[24,12],hB:[25,11],tip:[32,4],butt:[23.2,13],
-    hipN:[13.5,22],kN:[11.5,30],aN:[10,37],hipF:[20,22],kF:[24,29],aF:[25,37]},
-  follow:{head:[18,7],torso:[[12,11.5],[23,11.5],[21.5,22],[12.5,22]],sN:[13,12.5],eN:[16,10],sF:[22,12.5],eF:[18,10.5],grip:[12.5,9],hB:[11.5,9.5],tip:[2,14],butt:[13.5,8.4],behind:1,
-    hipN:[14,22],kN:[12.5,30],aN:[11,37],hipF:[20,22],kF:[24,29],aF:[25,37]},
-  bunt:{head:[16.5,6.5],torso:[[11,11],[22,11],[21,22],[12,22]],sN:[11.5,12],eN:[11,15],sF:[21.5,12],eF:[20,15],grip:[13.5,15.8],hB:[20.5,15.8],tip:[30,15.8],butt:[11.5,15.8],
-    hipN:[13,22],kN:[11,29.5],aN:[10,37],hipF:[19.5,22],kF:[22,29.5],aF:[23,37]},
-};
-const RBI_S=2.2,RBI_DARK='#1c1820',RBI_BAT='#2b2125';
-function rbiBatterParts(J,k){
-  const s=RBI_S,f=s/1.6*1.12,q=p=>[p[0]*s,p[1]*s],P=[],L=(a,b,r0,r1,c)=>({k:'line',p:[q(a),q(b)],r0:r0*f,r1:r1*f,c});
-  const tc=(J.torso[0][0]+J.torso[1][0])/2,TO=J.torso.map(([x,y])=>[tc+(x-tc)*1.15,y]);   // a broad R.B.I. back
-  const bat=()=>P.push(L(J.butt,J.tip,1.1,2,RBI_BAT));
-  if(J.behind) bat();
-  P.push(L(J.sF,J.eF,2.3,2,RBI_DARK),L(J.eF,J.hB,2,1.8,RBI_DARK));                           // far arm
-  for(const [hip,kn,an] of [[J.hipN,J.kN,J.aN],[J.hipF,J.kF,J.aF]]){ const sk=lerp2(kn,an,.62);
-    P.push(L(hip,kn,3.3,2.8,k.pan),L(kn,sk,2.8,2.5,k.pan),L(sk,an,2.3,2.1,k.cap),L(an,[an[0]+2.4,an[1]+.5],2.2,2,RBI_DARK)); }
-  P.push({k:'poly',p:TO.map(q),c:k.jer});
-  const t=TO; P.push({k:'rect',x:Math.round(t[3][0]*s),y:Math.round(t[3][1]*s)-2,w:Math.round((t[2][0]-t[3][0])*s)+1,h:2,c:RBI_DARK});
-  const hd=q(J.head); P.push({k:'line',p:[[hd[0],hd[1]+4*f],[hd[0],t[0][1]*s+1]],r0:2.4*f,r1:2.6*f,c:k.skin});
-  P.push({k:'disc',x:hd[0],y:hd[1],r:6.2*f,c:k.cap},{k:'disc',x:hd[0]+4.2*f,y:hd[1]+1.8*f,r:3.2*f,c:k.skin},{k:'rect',x:Math.round(hd[0]+1.5*f),y:Math.round(hd[1]-1.2*f),w:Math.round(6*f),h:Math.round(2*f),c:k.cap});
-  if(!J.behind) bat();
-  P.push(L(J.sN,J.eN,2.4,2.1,RBI_DARK),L(J.eN,J.grip,2.1,1.9,RBI_DARK));                       // near arm
-  P.push({k:'disc',x:J.grip[0]*s,y:J.grip[1]*s,r:2.1*f,c:k.skin},{k:'disc',x:J.hB[0]*s,y:J.hB[1]*s,r:2.1*f,c:k.skin});
-  return P;
-}
-// 3x5 digits for the number on the back
-const DIG=['111101101101111','010110010010111','111001111100111','111001111001111','101101111001001','111100111001111','111100111101111','111001010010010','111101111101111','111101111001111'];
-function rearBatterParts(J,k,u,num,flip){
-  const P=[],q=p=>qU(p,u),R=Math.round,hB=J.hB;
-  const bat=()=>{ P.push({k:'line',p:[q(J.butt),q(J.tip)],r0:.55*u,r1:1.05*u,c:k.bat,noSep:1},{k:'line',p:[q(J.butt),q(lerp2(J.butt,J.tip,.28))],r0:.5*u,r1:.55*u,c:k.batD,noSep:1},
-    {k:'line',p:[q(lerp2(J.butt,J.tip,.4)),q(lerp2(J.butt,J.tip,.93))],r0:.3,r1:.45,c:k.batH,noSep:1,flat:1}); };
-  if(J.behind) bat();
-  arm8(P,J.sF,J.eF,hB,k,true,1,1.3,u);                                   // far arm, mostly behind his back
-  leg8(P,J.hipN,J.kN,J.aN,k,false,1,1.5,u); leg8(P,J.hipF,J.kF,J.aF,k,false,1,1.5,u);
-  P.push({k:'line',p:[q([J.head[0],J.head[1]+2.5]),q([J.head[0],J.torso[0][1]+.6])],r0:1.3*u,r1:1.4*u,c:k.skinD});
-  P.push({k:'poly',p:J.torso.map(q),c:k.jer,c2:k.jerD,shadeX:(J.torso[0][0]+3)*u});
-  const t=J.torso,bx=R((t[3][0])*u),by=R(t[3][1]*u)-u;                  // belt
-  P.push({k:'rect',x:bx,y:by,w:R((t[2][0]-t[3][0])*u)+1,h:u,c:'#1d1922',flat:1});
-  const cx=(t[0][0]+t[1][0])/2,ny=t[0][1]+2.2;                          // number on the back
-  // a lefty's sprite gets mirrored, so pre-mirror his number to read right way round
-  const ds=String(num).split(''); if(flip) ds.reverse();
-  ds.forEach((d,i,a)=>{ const x0=R((cx-(a.length*4-1)/2+i*4)*u),y0=R(ny*u);
-    for(let r=0;r<5;r++) for(let c=0;c<3;c++) if(DIG[+d][r*3+(flip?2-c:c)]==='1') P.push({k:'rect',x:x0+c*u,y:y0+r*u,w:u,h:u,c:k.pan,flat:1}); });
-  // back of the batting helmet, the neck under it, the ear flap toward the catcher
-  P.push({k:'disc',x:J.head[0]*u,y:(J.head[1]+.4)*u,r:3.4*u,c:k.skin});
-  P.push({k:'disc',x:J.head[0]*u,y:(J.head[1]-.4)*u,r:3.9*u,c:k.cap,maxY:R((J.head[1]+1.9)*u)},
-         {k:'disc',x:(J.head[0]-2.4)*u,y:(J.head[1]+1.6)*u,r:1.7*u,c:k.cap},
-         {k:'rect',x:R((J.head[0]-1.2)*u),y:R((J.head[1]-3.6)*u),w:4,h:1,c:'#ffffff',flat:1},{k:'rect',x:R((J.head[0]-2)*u),y:R((J.head[1]-3)*u),w:1,h:2,c:k.cap2,flat:1});
-  if(!J.behind) bat();
-  P.push({k:'disc',x:J.grip[0]*u,y:J.grip[1]*u,r:1.35*u,c:k.glv,sep:1},{k:'disc',x:hB[0]*u,y:hB[1]*u,r:1.35*u,c:k.glv,sep:1});
-  arm8(P,J.sN,J.eN,J.grip,k,false,1,1.35,u);                             // near arm over the top
-  return P;
-}
-const BAT_PX=3,PIT_PX=1.3;   // game pixels per NES-grid pixel; the sprites are drawn SPR_U times finer than that
-const SPR_U=2;
+const PIT_PX=1.3;   // game pixels per pitcher art pixel
 function batFrame(phase,bunt){ return bunt?'bunt':phase<=0?'stance':phase<.22?'load':phase<.5?'contact':phase<.72?'extend':'follow'; }
 let batHead=[0,0];
-function drawBatter(t,skin,hb,off,phase,bunt,num){
-  // 1 sprite pixel = 1 game pixel, like the NES. His feet sit where the contact frame's bat (grid y 16.3) lands on the pitch's height.
-  const c=batterSprite(t,skin,batFrame(phase,bunt),hb<0,num),S=RBI_S,sx=128-hb*40+off*19.8,sy=pp(0,0,2.6)[1]+(38-16.3)*S;
-  const ax=(hb<0?43-16:16)*S,J=BATR[batFrame(phase,bunt)];
-  ctx.imageSmoothingEnabled=false; ctx.drawImage(c,snap(sx-ax),snap(sy-38*S),c.width,c.height);
-  batHead=[sx+(hb<0?-1:1)*(J.head[0]-16)*S,sy-(38-J.head[1])*S];
+// the hand-drawn batter at 2 game px per art pixel; his feet sit where the contact frame's bat (art row 21.5) meets the pitch (2.6 ft)
+const BATK2=2,BAT_FEET=14;
+function drawBatter(t,skin,hb,off,phase,bunt){
+  const c=batterSprite(t,skin,batFrame(phase,bunt),hb<0),k=BATK2,sx=128-hb*40+off*19.8,sy=pp(0,0,2.6)[1]+(42-21.5)*k;
+  const fx=hb<0?c.aw-1-BAT_FEET:BAT_FEET;
+  ctx.imageSmoothingEnabled=false; ctx.drawImage(c,snap(sx-(fx+1)*k),snap(sy-(c.ah+1)*k),c.width*k,c.height*k);
+  batHead=[sx+(hb<0?1:-1)*2*k,sy-34*k];
 }
-function drawPitcher(sx,sy,s,t,skin,frame,ball){
-  const c=pitcherSprite(t,skin,frame,ball);
-  ctx.drawImage(c,snap(sx-13*PIT_PX),snap(sy-28*PIT_PX),26*PIT_PX,30*PIT_PX);
+function drawPitcher(sx,sy,s,t,skin,frame){
+  const c=pitcherSprite(t,skin,frame),k=PIT_PX;
+  ctx.drawImage(c,snap(sx-(c.aw/2+1)*k),snap(sy-(c.ah+1)*k),c.width*k,c.height*k);
 }
 
 

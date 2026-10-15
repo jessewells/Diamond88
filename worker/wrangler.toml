@@ -16,7 +16,7 @@ class_name = "Room"
 tag = "v1"
 new_sqlite_classes = ["Room"]
 
-# derby leaderboard (optional): create a KV namespace and paste its id
-# [[kv_namespaces]]
-# binding = "LB"
-# id = "PASTE_KV_NAMESPACE_ID_HERE"
+# derby leaderboard
+[[kv_namespaces]]
+binding = "LB"
+id = "33e7f5eada3847cf853c5a7e8d80fa61"

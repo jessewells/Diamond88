@@ -1292,9 +1292,10 @@ function updatePitch(dt){
       P.off+=clamp(P.cpuOff-P.off,-3*dt,3*dt);
       if(P.cpuSwingAt!==null&&!P.swing&&P.t>=P.cpuSwingAt){P.swing={t:P.t,bunt:P.cpuBunt}; P.swingT=P.cpuBunt?-1:0;}
     }
-    if(P.swing&&!P.resolved&&P.t>=P.swing.t+.08){
+    // a bunt is squared early and held out, so it meets the ball when the ball arrives, not when B was pressed
+    if(P.swing&&!P.resolved&&P.t>=(P.swing.bunt?Math.max(P.swing.t,P.T-.08):P.swing.t)+.08){
       P.resolved=true;
-      const dtc=P.swing.t+.08-P.T,dx=xAt(P.T)-P.off;
+      const dtc=P.swing.bunt?Math.max(0,P.swing.t+.08-P.T):P.swing.t+.08-P.T,dx=xAt(P.T)-P.off;
       const c=contact(dtc,dx,curBatter(),P.swing.bunt);
       if(hBat&&!P.swing.bunt) swingFeedback(dtc,dx,!!c);
       if(c){ P.tc=P.t; P.hitX=P.ballX; P.hitU=Math.min(1.05,P.t/P.T); P.state='contact'; P.t=0; P.pending=c; SFX.crack(); shake(.3,3); flashT=.1; return; }
@@ -1427,6 +1428,9 @@ function onCatch(){
   F.caught=true; SFX.pop(); { const c=F.fl[F.ball.f]; puff(c.x,c.y,6,'#ffffff'); }
   outR(F.runners[0],true);
   if(G.outs>=3) return;
+  // a runner who left before the catch has to go back and tag; a run he scored early comes off the board
+  for(const r of F.runners){ if(!r.scored||r.isB||r.phantom||r.origin<1) continue;
+    r.scored=false; r.pos=3.95; F.runsPlay--; G.score[G.half]--; G.line[G.half][G.inning-1]--; }
   for(const r of live()){ if(r.pos!==r.origin) r.target=r.origin; else decideAdvance(r); }
 }
 function ballTimeTo(base){

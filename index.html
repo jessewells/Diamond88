@@ -1092,7 +1092,7 @@ function cpuPinch(){
 function banner(text,sub,then,t=1.6,col){ G.banner={text,sub,then,t,T:t,col}; }
 function addRuns(n){ G.score[G.half]+=n; G.line[G.half][G.inning-1]=(G.line[G.half][G.inning-1]||0)+n;
   for(const s of [0,1]) G.down[s]=Math.max(G.down[s]||0,G.score[1-s]-G.score[s]); }
-function startAtBat(){ G.balls=0; G.strikes=0; G.batOff=0; G.pen=false; G.benchUI=null; newPitch(); cpuBullpen(); if(!G.banner) cpuPinch(); if(G.pa++===G.streakAt) startStreak(); else if(!G.demo&&!G.derby) crowdMoment(); }
+function startAtBat(){ G.batGone=false; G.balls=0; G.strikes=0; G.batOff=0; G.pen=false; G.benchUI=null; newPitch(); cpuBullpen(); if(!G.banner) cpuPinch(); if(G.pa++===G.streakAt) startStreak(); else if(!G.demo&&!G.derby) crowdMoment(); }
 // the home crowd: CHARGE or a LET'S GO chant with their runners in scoring position, DE-FENSE when the visitors threaten,
 // and otherwise the home batter's walk-up music
 function crowdMoment(){
@@ -1649,7 +1649,7 @@ function finishPlay(){
     return;
   }
   if(f.foul&&!f.caught){ G.phase='pitch'; if(G.strikes<2) G.strikes++; newPitch(); P.msg='FOUL BALL'; P.msgT=1; SFX.strike(); return; }
-  const bat=f.runners[0];
+  const bat=f.runners[0]; G.batGone=true;   // he's on base or out now: the plate stays empty until the next batter steps in
   G.bases=[null,null,null];
   if(G.outs<3) for(const r of f.runners){ if(r.out||r.scored) continue; const p=Math.round(r.pos); if(p>=1&&p<=3&&!G.bases[p-1]) G.bases[p-1]=r.info; }
   let res,col=C.text;
@@ -1763,14 +1763,14 @@ function drawPitch(){
   const drawBall=()=>{ if(!bq) return;
     (P.trail||[]).forEach((t,i,a)=>{ ctx.globalAlpha=.08+.3*i/a.length; ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(t[0],t[1],t[2]*.8,0,7); ctx.fill(); });
     ctx.globalAlpha=1; drawBallArt(bq[0],bq[1],Math.max(1,bq[2]*.13),P.t*30); };
-  if(!front) drawBall();
+  if(!front&&!G.batGone) drawBall();
   const bt=curBatter(),phase=P.swingT<0?0:Math.min(1,P.swingT/.2);
   const num=jerseyNo(bt[0]);
   if(P.hbp){ const k=Math.min(1,P.t*4); drawBatter(off,skinOf(bt[0]),P.hb,P.off-P.hb*.6*k,0,false,num);
     for(let i=0;i<3;i++){ const a=P.t*6+i*2.1; drawStar(batHead[0]+Math.cos(a)*12,batHead[1]-8+Math.sin(a)*3); } }
-  else drawBatter(off,skinOf(bt[0]),P.hb,P.off,P.swing&&P.swing.bunt?.42:phase,!!(P.swing&&P.swing.bunt),num);
+  else if(!G.batGone) drawBatter(off,skinOf(bt[0]),P.hb,P.off,P.swing&&P.swing.bunt?.42:phase,!!(P.swing&&P.swing.bunt),num);
   drawCatcher(def,skinOf(def.lineup[1][0]));
-  if(front) drawBall();
+  if(front&&!G.batGone) drawBall();
   if(P.state==='contact'&&bq){ const a=P.t*9;
     ctx.save(); ctx.translate(bq[0],bq[1]); ctx.rotate(a*.3);
     for(let i=0;i<10;i++){ const r1=4+P.t*20,r2=12+P.t*70*(i%2?.6:1); ctx.strokeStyle=i%2?'#f4c84a':'#ffffff'; ctx.lineWidth=1.5;

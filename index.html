@@ -1105,7 +1105,15 @@ function stealRel(){ return P.state==='flight'?P.t:P.state==='windup'?P.t-.6:-.7
 function callSteal(){
   const who=[]; for(let b=3;b>=1;b--){ if(!G.bases[b-1]) continue; if(b===3||!G.bases[b]||who.includes(b+1)) who.push(b); }
   if(!who.length) return;
+  // breaking before the pitcher even starts his motion is a big jump, but a CPU pitcher may step off and throw over
+  if(P.state==='ready'&&!humanPitching()&&!G.derby&&Math.random()<.35){ pickoff(who[who.length-1]); return; }
   P.steal={rel:stealRel(),who}; SFX.blip();
+}
+function pickoff(base){
+  const info=G.bases[base-1],out=Math.random()<.6-.35*info[4];
+  P.state='after'; P.t=0; P.msgT=1.4; SFX.thr();
+  if(out){ G.bases[base-1]=null; G.outs++; pitLine().outs++; SFX.out(); P.msg='PICKED OFF!'; P.next=G.outs>=3?endHalf:newPitch; }
+  else { P.msg='PICKOFF THROW · SAFE'; P.next=newPitch; }
 }
 function cpuSteal(){
   if(P.steal||G.outs>=2&&Math.random()<.5) return;
@@ -1121,7 +1129,7 @@ function startStealPlay(cont){
      catcher:1,catchT:0,catchPt:{x:0,y:-5},air:false,over:false,pops:[],steal:true,cont,relay:1};
   F.runners.push({...mkRunner(curBatter(),0,true),phantom:true});
   G.bases.forEach((info,i)=>{ if(!info) return; const r=mkRunner(info,i+1,false);
-    if(st.who.includes(i+1)){ r.target=i+2; r.pos=Math.min(i+1.92,i+1.08+Math.max(0,el)*r.spd/90*.95); }
+    if(st.who.includes(i+1)){ r.target=i+2; r.pos=Math.min(i+1.92,i+1.05+Math.max(0,el)*r.spd/90*.8); }
     F.runners.push(r); });
   for(const b of [2,3]){ const f=fl[F.cover[b]]; f.tx=BASE[b][0]; f.ty=BASE[b][1]; }
   G.phase='field'; camUpdate(0,true); SFX.thr();
@@ -1232,6 +1240,12 @@ function pitchResult(kind){
     if(G.balls>=4){P.msg='BALL FOUR'; P.next=walk; P.steal=null;} else {P.msg='BALL'; P.next=newPitch;} }
   else { G.strikes++; SFX.strike();
     if(G.strikes>=3){P.msg='STRIKE THREE'; P.next=()=>{G.outs++; SFX.out(); if(!G.derby&&++G.kc[1-G.half]>=6) earn('KS',1-G.half); const bl=batLine(),pl=pitLine(); bl.ab++; bl.k++; pl.k++; pl.outs++; afterAB();};} else {P.msg='STRIKE'; P.next=newPitch;} }
+  // a pitch the batter didn't touch can get by the catcher: every runner moves up a base (more often from a tired arm)
+  if(!P.swing&&P.next===newPitch&&G.bases.some(Boolean)&&Math.random()<.03+.05*fatigue(armNow())){
+    const wp=Math.random()<.6; P.msg+=wp?' · WILD PITCH':' · PASSED BALL'; P.msgT=1.6; P.steal=null; SFX.bounce();
+    if(G.bases[2]){ addRuns(1); SFX.score(); const pl=pitLine(); pl.r++; armNow().load+=3; }
+    G.bases=[null,G.bases[0],G.bases[1]];
+  }
 }
 function updatePitch(dt){
   if(P.msgT>0) P.msgT-=dt;
@@ -1340,8 +1354,16 @@ const throwSpd=i=>i>=6?96:i===1?108:115;
 // long throws lose speed and arc (or take a hop), so time grows faster than distance
 const throwT=(i,d)=>d/throwSpd(i)*(1+Math.max(0,d-150)/700);
 // an outfielder picking a ball up off the grass has to stop, gather and set his feet before he can throw
-const gatherT=i=>i>=6?.7:.25;
-function mkRunner(info,base,isB){ return {info,pos:base,origin:base,target:base,spd:21+info[4]*7,isB,out:false,scored:false,delay:isB?.3:0}; }
+const gatherT=i=>i>=6?.7:.4;
+// errors: fielders sometimes boot a grounder, drop a fly or throw it away (POSN = scorebook position number)
+const POSN=[1,2,3,4,6,5,7,8,9],ERR={boot:.03,drop:.015,thr:.02};
+function fieldErr(i,x,y,v){
+  F.err=F.err||{pos:POSN[i],early:F.runners[0].pos<1};
+  const a=Math.random()*6.283; F.ball={st:'loose',recv:i,x,y,z:0,vx:Math.cos(a)*v,vy:Math.sin(a)*v}; F.air=false;
+  F.pops.push({x,y,t:0,s:'E'+POSN[i]}); SFX.bounce();
+  for(const r of live()) if(r.pos===r.target) decideAdvance(r);
+}
+function mkRunner(info,base,isB){ return {info,pos:base,origin:base,target:base,spd:21+info[4]*11,isB,out:false,scored:false,delay:isB?.3:0}; }
 
 function startField(c){
   P.swingT=Math.max(P.swingT,0); FX=FX.filter(f=>f.k!=='w'); F=null;
@@ -1367,7 +1389,8 @@ function startField(c){
   if(F.fair||F.air) for(const b in F.cover){ const f=fl[F.cover[b]]; f.tx=BASE[b][0]; f.ty=BASE[b][1]+(b==4?-2:0); }
   if(F.catchPt) for(let i=6;i<9;i++) if(i!==F.catcher){ const f=fl[i]; f.tx=f.x+(F.catchPt.x-f.x)*.45; f.ty=f.y+(F.catchPt.y-f.y)*.45; }
   F.runners.push(mkRunner(curBatter(),0,true));
-  G.bases.forEach((r,i)=>{ if(r) F.runners.push(mkRunner(r,i+1,false)); });
+  // runners on base have a lead off the bag when the ball is hit (held runners on a fly drift back to tag)
+  G.bases.forEach((r,i)=>{ if(r){ const q=mkRunner(r,i+1,false); if(!F.foul) q.pos+=.1; F.runners.push(q); } });
   if(F.foul) return;
   if(F.hr){ F.runners.forEach(r=>{r.target=4; r.spd*=1.5; if(r.isB) r.delay=.9;}); SFX.hr(); fireworks(); return; }
   if(F.gr){ F.runners.forEach(r=>{r.target=Math.min(4,r.origin+2); if(r.isB) r.delay=.6;}); return; }
@@ -1375,6 +1398,12 @@ function startField(c){
   F.runners.forEach(r=>{ if(r.isB||!hold) r.target=r.origin+1; });
   if(P.steal){ const el=Math.max(0,(P.tc||0)-P.steal.rel);   // hit-and-run: runners already have a head start
     F.runners.forEach(r=>{ if(!r.isB&&P.steal.who.includes(r.origin)){ r.target=r.origin+1; r.pos=Math.min(r.origin+.75,r.origin+.08+el*r.spd/90*.93); } }); }
+  // an unforced runner only runs on a grounder when he can beat the throw (a ball hit in front of him freezes him)
+  if(!F.air) F.runners.forEach(r=>{ if(r.isB||r.target!==r.origin+1||isForced(r)||(P.steal&&P.steal.who.includes(r.origin))) return;
+    if(ballTimeTo(r.origin+1)-(r.origin+1-r.pos)*90/r.spd<=advMargin()) r.target=r.origin; });
+  // infield fly: a pop-up an infielder can handle with runners on 1st and 2nd and under two outs is an out right away,
+  // so the defense can't let it drop for a cheap double play (runners advance at their own risk)
+  if(hold&&F.la>45&&F.catcher>=0&&F.catcher<6&&G.bases[0]&&G.bases[1]){ F.ifr=true; outR(F.runners[0],false); F.pops[F.pops.length-1].s='INFIELD FLY'; }
 }
 function coverOf(b){ return F.cover[b]===undefined?-1:F.cover[b]; }
 function live(){ return F.runners.filter(r=>!r.out&&!r.scored&&!r.phantom); }
@@ -1414,14 +1443,16 @@ function decideAdvance(r){
   if(others.some(o=>o.target===b&&o.pos<b)){ r.target=b+1; return; }   // forced along
   if(others.some(o=>o.target===b+1)) return;                             // base ahead taken
   const tr=90/r.spd,tb=ballTimeTo(b+1);
-  const margin=humanBatting()?.55:.25+Math.random()*.35;
+  const margin=advMargin();
   if(tb-tr>margin) r.target=b+1;
 }
+// how much cushion a runner wants before taking the extra base: aggressive, so balls in the gap score runs
+const advMargin=()=>humanBatting()?.2:Math.random()*.3;
 function roundBase(r){
   if(F.air&&!F.caught&&G.outs<2) return;
   const b=r.target,others=live().filter(o=>o!==r);
   if(others.some(o=>o.target===b+1||(o.pos>b&&o.pos<b+1))) return;   // base ahead taken
-  const tr=(b-r.pos+1)*90/r.spd,tb=ballTimeTo(b+1),margin=humanBatting()?.55:.25+Math.random()*.35;
+  const tr=(b-r.pos+1)*90/r.spd,tb=ballTimeTo(b+1),margin=advMargin();
   if(tb-tr>margin) r.target=b+1;
 }
 function sendRunners(){
@@ -1440,7 +1471,7 @@ function holdRunners(){
 function throwTo(b){
   const fi=F.ball.f,f=F.fl[fi],to={x:BASE[b][0],y:BASE[b][1]};
   // on a steal the catcher sometimes airmails it: the throw sails past the bag into the outfield
-  if(F.steal&&!F.wild&&Math.random()<.1){ F.wild=1; const dx=to.x-f.x,dy=to.y-f.y,L=hyp(dx,dy),over=rand(50,80),side=rand(-15,15);
+  if(!F.wild&&hyp(f.x-to.x,f.y-to.y)>40&&Math.random()<(F.steal?.1:ERR.thr)){ F.wild=1; F.wildBy=fi; F.wildEarly=b===1&&F.runners[0].pos<1; const dx=to.x-f.x,dy=to.y-f.y,L=hyp(dx,dy),over=F.steal?rand(50,80):rand(25,45),side=rand(-15,15);
     to.x+=dx/L*over-dy/L*side; to.y+=dy/L*over+dx/L*side; }
   const d=hyp(f.x-to.x,f.y-to.y);
   F.ball={st:'throw',from:{x:f.x,y:f.y},to,t0:F.t,dur:Math.max(.15,throwT(fi,d)),recv:coverOf(b),thr:fi,x:f.x,y:f.y,z:5,d};
@@ -1524,20 +1555,22 @@ function updateField(dt){
     if(F.tr.wall>=0&&j>=F.tr.wall&&!F.wallHit){ F.wallHit=1; puff(p.x,p.y,10,'#ffffff'); F.pops.push({x:p.x,y:p.y,t:-.15,s:'OFF THE WALL'}); SFX.pop(); }
     if(man&&F.air&&!F.caught&&F.tr.fc>=0&&j>=F.tr.fc){ F.air=false; for(const r of live()) if(!r.isB&&r.pos===r.target) decideAdvance(r); }   // dropped it: runners go
     if(man&&F.manualOn&&F.catcher>=0){ const c=F.fl[F.catcher],air=F.tr.fc<0||j<F.tr.fc;
-      if(p.z<8.5&&hyp(c.x-p.x,c.y-p.y)<5&&F.t>.3){ if(air&&c.mv&&hyp(c.x-p.x,c.y-p.y)>2.5) c.diveT=F.t; F.ball={st:'held',f:F.catcher}; F.cool=air?.25:gatherT(F.catcher); F.air=air; if(air) onCatch(); else SFX.pop(); }
+      if(p.z<8.5&&hyp(c.x-p.x,c.y-p.y)<5&&F.t>.3&&!F.foul&&Math.random()<(air?ERR.drop:ERR.boot)){ fieldErr(F.catcher,p.x,p.y,air?14:9); }
+      else if(p.z<8.5&&hyp(c.x-p.x,c.y-p.y)<5&&F.t>.3){ if(air&&c.mv&&hyp(c.x-p.x,c.y-p.y)>2.5) c.diveT=F.t; F.ball={st:'held',f:F.catcher}; F.cool=air?.25:gatherT(F.catcher); F.air=air; if(air) onCatch(); else SFX.pop(); }
       else if(j>=F.tr.pts.length-1) F.ball={st:'loose',recv:F.catcher,x:p.x,y:p.y,z:0}; }
     else if(F.catcher>=0&&F.t>=F.catchT){ const c=F.fl[F.catcher];
-      if(hyp(c.x-F.catchPt.x,c.y-F.catchPt.y)<6){ if(F.air&&c.mv&&hyp(c.x-F.catchPt.x,c.y-F.catchPt.y)>2) c.diveT=F.t; F.ball={st:'held',f:F.catcher}; F.cool=F.air?.25:gatherT(F.catcher); if(F.air) onCatch(); else SFX.pop(); } }
+      if(hyp(c.x-F.catchPt.x,c.y-F.catchPt.y)<6&&!F.foul&&Math.random()<(F.air?ERR.drop:ERR.boot)) fieldErr(F.catcher,F.catchPt.x,F.catchPt.y,F.air?14:9);
+      else if(hyp(c.x-F.catchPt.x,c.y-F.catchPt.y)<6){ if(F.air&&c.mv&&hyp(c.x-F.catchPt.x,c.y-F.catchPt.y)>2) c.diveT=F.t; F.ball={st:'held',f:F.catcher}; F.cool=F.air?.25:gatherT(F.catcher); if(F.air) onCatch(); else SFX.pop(); } }
   } else if(b.st==='held'){
     const f=F.fl[b.f]; b.x=f.x; b.y=f.y; b.z=4;
   } else if(b.st==='throw'){
     const u=Math.min(1,(F.t-b.t0)/b.dur);
     b.x=b.from.x+(b.to.x-b.from.x)*u; b.y=b.from.y+(b.to.y-b.from.y)*u; b.z=4.4+Math.sin(Math.PI*u)*Math.min(28,b.d*.07);
     if(u>=1){ const rv=F.fl[b.recv];
-      if(hyp(rv.x-b.to.x,rv.y-b.to.y)<10){ rv.x=b.to.x; rv.y=b.to.y; rv.tx=rv.x; rv.ty=rv.y; F.ball={st:'held',f:b.recv,x:rv.x,y:rv.y,z:4}; F.cool=.12; SFX.pop(); }
+      if(hyp(rv.x-b.to.x,rv.y-b.to.y)<10){ rv.x=b.to.x; rv.y=b.to.y; rv.tx=rv.x; rv.ty=rv.y; F.ball={st:'held',f:b.recv,x:rv.x,y:rv.y,z:4}; F.cool=.5; SFX.pop(); }
       else { const d=Math.max(1,hyp(b.to.x-b.from.x,b.to.y-b.from.y)),v=.45*b.d/b.dur;
         F.ball={st:'loose',recv:b.recv,x:b.to.x,y:b.to.y,z:0,vx:(b.to.x-b.from.x)/d*v,vy:(b.to.y-b.from.y)/d*v}; SFX.bounce();
-        if(F.wild===1){ F.wild=2; F.pops.push({x:b.to.x,y:b.to.y,t:0,s:'WILD THROW'}); for(const r of live()) if(r.pos===r.target) decideAdvance(r); } } }   // runners already on the bag can take another
+        if(F.wild===1){ F.wild=2; F.pops.push({x:b.to.x,y:b.to.y,t:0,s:F.steal?'WILD THROW':'E'+POSN[F.wildBy]}); if(!F.steal) F.err=F.err||{pos:POSN[F.wildBy],early:F.wildEarly}; for(const r of live()) if(r.pos===r.target) decideAdvance(r); } } }   // runners already on the bag can take another
   } else if(b.st==='loose'){
     if(b.vx||b.vy){   // rolling: slow down, stop at the wall
       b.x+=b.vx*dt; b.y+=b.vy*dt; const sp=hyp(b.vx,b.vy),k=Math.max(0,sp-45*dt)/sp; b.vx*=k; b.vy*=k;
@@ -1558,7 +1591,12 @@ function updateField(dt){
   for(const r of live()){
     if(r.delay>0){ r.delay-=dt; continue; }
     if(r.pos===r.target) continue;
-    const dir=Math.sign(r.target-r.pos); r.pos+=dir*r.spd/90*dt;
+    let dir=Math.sign(r.target-r.pos);
+    // rundown: the ball beat him to the base he's heading for, so he turns back (a few times at most) and makes them chase him
+    if(F.ball.st==='held'&&!F.hr&&!F.gr&&(r.rev||0)<3&&!isForced(r)&&r.target>=1){ const h=F.fl[F.ball.f],[rx,ry]=runnerXY(r),B=BASE[r.target],back=dir>0?Math.floor(r.pos):Math.ceil(r.pos);
+      if(back!==r.target&&back>=1&&back<=3&&hyp(h.x-B[0],h.y-B[1])<hyp(rx-B[0],ry-B[1])-6&&hyp(h.x-rx,h.y-ry)<45&&!live().some(o=>o!==r&&o.target===back)){
+        r.target=back; dir=-dir; r.rev=(r.rev||0)+1; if(r.rev===1){ F.pops.push({x:rx,y:ry,t:0,s:'RUNDOWN'}); F.rd=1; } } }
+    r.pos+=dir*r.spd/90*dt;
     // rounding a base: a runner reads the play before he gets there and keeps going if the ball is still deep
     if(dir>0&&!F.hr&&!F.gr&&r.target<4&&r.peek!==r.target&&r.target-r.pos<.3){ r.peek=r.target; roundBase(r); }
     if((dir>0&&r.pos>=r.target)||(dir<0&&r.pos<=r.target)){
@@ -1615,19 +1653,21 @@ function finishPlay(){
   else if(f.gr){res='GROUND RULE DOUBLE';col=C.yellow;}
   else if(bat.out){
     if(f.outsPlay>=3) res='TRIPLE PLAY'; else if(f.outsPlay===2) res='DOUBLE PLAY';
-    else if(f.caught) res=f.foul?'FOUL OUT':f.la>48?'POP OUT':f.la<13?'LINE OUT':'FLY OUT';
+    else if(f.ifr) res='INFIELD FLY';
+    else if(f.caught) res=f.foul?'FOUL OUT':f.runsPlay&&f.la>=13?'SAC FLY':f.la>48?'POP OUT':f.la<13?'LINE OUT':'FLY OUT';
     else res='GROUND OUT';
   } else if(f.outsPlay>0) res="FIELDER'S CHOICE";
+  else if(f.err&&f.err.early) res='SAFE ON ERROR';
   else { res=bat.scored?'INSIDE THE PARK':['','SINGLE','DOUBLE','TRIPLE'][Math.round(bat.pos)]||'SAFE'; col=C.yellow; }
-  const hit=!bat.out&&f.outsPlay===0;
+  const hit=!bat.out&&f.outsPlay===0&&res!=='SAFE ON ERROR';
   if(hit) G.hits[G.half]++;
-  { const bl=batLine(),pl=pitLine(),a=armNow(); bl.ab++; bl.rbi+=f.runsPlay; pl.r+=f.runsPlay; pl.outs+=f.outsPlay; a.load+=3*f.runsPlay;
+  { const bl=batLine(),pl=pitLine(),a=armNow(); if(res!=='SAC FLY') bl.ab++; if(!f.err||f.err.early&&res!=='SAFE ON ERROR'||res==='SAC FLY'||hit) bl.rbi+=f.runsPlay; pl.r+=f.runsPlay; pl.outs+=f.outsPlay; a.load+=3*f.runsPlay;
     if(hit){ bl.h++; pl.h++; a.load+=2; } if(f.hr) bl.hr++;
     if(hit){ bl.ty=bl.ty||[]; const ty=f.hr||bat.scored?4:f.gr?2:Math.round(bat.pos); if(!bl.ty.includes(ty)) bl.ty.push(ty); if(bl.ty.length>=4) earn('CYCLE',G.half); } }
   if(f.hr){ earnHomer(G.half,f); if(f.runsPlay>=4) earn('SLAM',G.half); }
   if(f.outsPlay>=3) earn('TRIPLE',1-G.half);
   if(!bat.out&&!f.hr){ SFX.hit(); if(G.half===1) SFX.cheer(); }
-  const sub=(f.hr&&f.tr.dist?f.tr.dist+' FT · ':'')+(f.runsPlay?(f.runsPlay+(f.runsPlay>1?' RUNS SCORE':' RUN SCORES')):'');
+  const sub=[f.hr&&f.tr.dist?f.tr.dist+' FT':'',f.err?'E'+f.err.pos:'',f.runsPlay?(f.runsPlay+(f.runsPlay>1?' RUNS SCORE':' RUN SCORES')):''].filter(Boolean).join(' · ');
   G.ab[G.half]++;
   banner(res,sub,()=>{
     if(G.outs>=3) endHalf();

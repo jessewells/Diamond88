@@ -144,7 +144,7 @@ kbd{font:inherit;font-size:9px;color:var(--ink);background:var(--deck);border-ra
 
 <script>
 'use strict';
-const W=256,H=240,DT=1/60,KD=0.0012,ROLL=30;
+const W=256,H=240,DT=1/60,KD=0.0012,ROLL=18;
 const cv=document.getElementById('screen'),ctx=cv.getContext('2d');
 ctx.imageSmoothingEnabled=false;
 const rand=(a,b)=>a+Math.random()*(b-a);
@@ -1317,7 +1317,7 @@ function simTraj(v,la,sp){
           // how far it would have carried: finish the flight with no stands in the way
           let X=x,Y=y,Z=z,VX=vx,VY=vy,VZ=vz; for(let k=0;k<900&&Z>0;k++){ const AX=VX-WIND.vx,AY=VY-WIND.vy,q=hyp(AX,AY,VZ),kk=KD*q; VX-=kk*AX*DT; VY-=kk*AY*DT; VZ-=(32+kk*VZ)*DT; X+=VX*DT; Y+=VY*DT; Z+=VZ*DT; }
           dist=Math.round(hyp(X,Y)); out=dist>=OUT_FT; continue; }
-        if(z>10&&fc>=0){ gr=true; pts.push({x,y,z}); break; }   // bounced over: ground-rule double
+        if(z>14&&fc>=0){ gr=true; pts.push({x,y,z}); break; }   // bounced over: ground-rule double
         if(fc<0) wall=i+1;
         const nx=x/r,ny=y/r,vn=vx*nx+vy*ny; if(vn>0){vx-=1.45*vn*nx; vy-=1.45*vn*ny;}
         x=nx*(fr-.5); y=ny*(fr-.5); if(fc<0) fc=i+1;
@@ -1337,6 +1337,10 @@ function judgeFair(tr){
   return p.y>0&&Math.abs(Math.atan2(p.x,p.y))<=Math.PI/4+.002;
 }
 const throwSpd=i=>i>=6?96:i===1?108:115;
+// long throws lose speed and arc (or take a hop), so time grows faster than distance
+const throwT=(i,d)=>d/throwSpd(i)*(1+d/1300);
+// an outfielder picking a ball up off the grass has to stop, gather and set his feet before he can throw
+const gatherT=i=>i>=6?.7:.25;
 function mkRunner(info,base,isB){ return {info,pos:base,origin:base,target:base,spd:21+info[4]*7,isB,out:false,scored:false,delay:isB?.3:0}; }
 
 function startField(c){
@@ -1377,7 +1381,9 @@ function live(){ return F.runners.filter(r=>!r.out&&!r.scored&&!r.phantom); }
 function isForced(r){
   if(F.steal) return false;
   if(r.isB) return r.pos<1;
-  if(F.caught||r.target!==r.origin+1||r.pos>=r.target) return false;
+  // after a catch a runner off his bag must tag up: beat him back to the bag with the ball and he's out, no tag needed
+  if(F.caught) return r.target===r.origin&&r.pos>r.origin;
+  if(r.target!==r.origin+1||r.pos>=r.target) return false;
   if(F.runners[0].out) return false;
   for(let b=1;b<r.origin;b++){ const o=F.runners.find(x=>!x.isB&&x.origin===b); if(!o||o.out) return false; }
   return true;
@@ -1396,10 +1402,10 @@ function onCatch(){
 }
 function ballTimeTo(base){
   const P0=BASE[base],b=F.ball;
-  if(b.st==='batted'){ if(!F.catchPt) return 99; return Math.max(0,F.catchT-F.t)+hyp(F.catchPt.x-P0[0],F.catchPt.y-P0[1])/throwSpd(F.catcher)+.35; }
-  if(b.st==='held'){ const f=F.fl[b.f]; return hyp(f.x-P0[0],f.y-P0[1])/throwSpd(b.f)+.3; }
-  if(b.st==='throw'){ const rem=b.dur-(F.t-b.t0),d=hyp(b.to.x-P0[0],b.to.y-P0[1]); return rem+(d<5?0:d/115+.3); }
-  const f=F.fl[b.recv]; return hyp(f.x-b.x,f.y-b.y)/f.spd+hyp(b.x-P0[0],b.y-P0[1])/115+.3;
+  if(b.st==='batted'){ if(!F.catchPt) return 99; return Math.max(0,F.catchT-F.t)+throwT(F.catcher,hyp(F.catchPt.x-P0[0],F.catchPt.y-P0[1]))+(F.air?0:gatherT(F.catcher))+.35; }
+  if(b.st==='held'){ const f=F.fl[b.f]; return Math.max(0,F.cool)+throwT(b.f,hyp(f.x-P0[0],f.y-P0[1]))+.3; }
+  if(b.st==='throw'){ const rem=b.dur-(F.t-b.t0),d=hyp(b.to.x-P0[0],b.to.y-P0[1]); return rem+(d<5?0:throwT(2,d)+.3); }
+  const f=F.fl[b.recv]; return hyp(f.x-b.x,f.y-b.y)/f.spd+gatherT(b.recv)+throwT(b.recv,hyp(b.x-P0[0],b.y-P0[1]))+.3;
 }
 function decideAdvance(r){
   const b=r.pos; if(b>=4) return;
@@ -1409,6 +1415,13 @@ function decideAdvance(r){
   if(others.some(o=>o.target===b+1)) return;                             // base ahead taken
   const tr=90/r.spd,tb=ballTimeTo(b+1);
   const margin=humanBatting()?.55:.25+Math.random()*.35;
+  if(tb-tr>margin) r.target=b+1;
+}
+function roundBase(r){
+  if(F.air&&!F.caught&&G.outs<2) return;
+  const b=r.target,others=live().filter(o=>o!==r);
+  if(others.some(o=>o.target===b+1||(o.pos>b&&o.pos<b+1))) return;   // base ahead taken
+  const tr=(b-r.pos+1)*90/r.spd,tb=ballTimeTo(b+1),margin=humanBatting()?.55:.25+Math.random()*.35;
   if(tb-tr>margin) r.target=b+1;
 }
 function sendRunners(){
@@ -1430,7 +1443,7 @@ function throwTo(b){
   if(F.steal&&!F.wild&&Math.random()<.1){ F.wild=1; const dx=to.x-f.x,dy=to.y-f.y,L=hyp(dx,dy),over=rand(50,80),side=rand(-15,15);
     to.x+=dx/L*over-dy/L*side; to.y+=dy/L*over+dx/L*side; }
   const d=hyp(f.x-to.x,f.y-to.y);
-  F.ball={st:'throw',from:{x:f.x,y:f.y},to,t0:F.t,dur:Math.max(.15,d/throwSpd(fi)),recv:coverOf(b),thr:fi,x:f.x,y:f.y,z:5,d};
+  F.ball={st:'throw',from:{x:f.x,y:f.y},to,t0:F.t,dur:Math.max(.15,throwT(fi,d)),recv:coverOf(b),thr:fi,x:f.x,y:f.y,z:5,d};
   SFX.thr(); F.cool=.3;
 }
 function holderThink(){
@@ -1442,7 +1455,7 @@ function holderThink(){
     let tb,how;
     if(d<4){tb=0;how='hold';}
     else{
-      const cv=coverOf(b),runT=d/f.spd,thT=d/throwSpd(fi)+.25;
+      const cv=coverOf(b),runT=d/f.spd,thT=throwT(fi,d)+.25;
       const cvT=cv>=0&&cv!==fi?hyp(F.fl[cv].x-bp[0],F.fl[cv].y-bp[1])/F.fl[cv].spd:99;
       const thTot=Math.max(thT,cvT);
       if((cv===fi||d<30)&&runT<thTot){tb=runT;how='run';} else {tb=thTot;how='throw';}
@@ -1462,7 +1475,7 @@ function holderThink(){
   let pick=null;
   for(const r of live()){ if(r.pos===r.target||r.target<1) continue; const b=r.target,cv=coverOf(b);
     if(cv<0||cv===fi||hyp(f.x-BASE[b][0],f.y-BASE[b][1])<6) continue;
-    const back=r.target<r.pos,tr=Math.abs(b-r.pos)*90/r.spd,tb=hyp(f.x-BASE[b][0],f.y-BASE[b][1])/throwSpd(fi)+.25,sc=(back?5:0)+(tr-tb);
+    const back=r.target<r.pos,tr=Math.abs(b-r.pos)*90/r.spd,tb=throwT(fi,hyp(f.x-BASE[b][0],f.y-BASE[b][1]))+.25,sc=(back?5:0)+(tr-tb);
     if(!pick||sc>pick.sc) pick={b,sc}; }
   if(pick){ throwTo(pick.b); return; }
   if(hyp(f.x,f.y)>150&&coverOf(2)>=0&&coverOf(2)!==fi&&!F.relay){ F.relay=1; throwTo(2); return; }
@@ -1511,10 +1524,10 @@ function updateField(dt){
     if(F.tr.wall>=0&&j>=F.tr.wall&&!F.wallHit){ F.wallHit=1; puff(p.x,p.y,10,'#ffffff'); F.pops.push({x:p.x,y:p.y,t:-.15,s:'OFF THE WALL'}); SFX.pop(); }
     if(man&&F.air&&!F.caught&&F.tr.fc>=0&&j>=F.tr.fc){ F.air=false; for(const r of live()) if(!r.isB&&r.pos===r.target) decideAdvance(r); }   // dropped it: runners go
     if(man&&F.manualOn&&F.catcher>=0){ const c=F.fl[F.catcher],air=F.tr.fc<0||j<F.tr.fc;
-      if(p.z<8.5&&hyp(c.x-p.x,c.y-p.y)<5&&F.t>.3){ if(air&&c.mv&&hyp(c.x-p.x,c.y-p.y)>2.5) c.diveT=F.t; F.ball={st:'held',f:F.catcher}; F.cool=.25; F.air=air; if(air) onCatch(); else SFX.pop(); }
+      if(p.z<8.5&&hyp(c.x-p.x,c.y-p.y)<5&&F.t>.3){ if(air&&c.mv&&hyp(c.x-p.x,c.y-p.y)>2.5) c.diveT=F.t; F.ball={st:'held',f:F.catcher}; F.cool=air?.25:gatherT(F.catcher); F.air=air; if(air) onCatch(); else SFX.pop(); }
       else if(j>=F.tr.pts.length-1) F.ball={st:'loose',recv:F.catcher,x:p.x,y:p.y,z:0}; }
     else if(F.catcher>=0&&F.t>=F.catchT){ const c=F.fl[F.catcher];
-      if(hyp(c.x-F.catchPt.x,c.y-F.catchPt.y)<6){ if(F.air&&c.mv&&hyp(c.x-F.catchPt.x,c.y-F.catchPt.y)>2) c.diveT=F.t; F.ball={st:'held',f:F.catcher}; F.cool=.25; if(F.air) onCatch(); else SFX.pop(); } }
+      if(hyp(c.x-F.catchPt.x,c.y-F.catchPt.y)<6){ if(F.air&&c.mv&&hyp(c.x-F.catchPt.x,c.y-F.catchPt.y)>2) c.diveT=F.t; F.ball={st:'held',f:F.catcher}; F.cool=F.air?.25:gatherT(F.catcher); if(F.air) onCatch(); else SFX.pop(); } }
   } else if(b.st==='held'){
     const f=F.fl[b.f]; b.x=f.x; b.y=f.y; b.z=4;
   } else if(b.st==='throw'){
@@ -1533,7 +1546,7 @@ function updateField(dt){
       let best=b.recv,bt=1e9; F.fl.forEach((f,i)=>{ const t=hyp(f.x-b.x,f.y-b.y)/f.spd; if(t<bt){ bt=t; best=i; } });
       if(best!==b.recv){ const o=F.fl[b.recv]; o.tx=o.x; o.ty=o.y; b.recv=best; } }
     const rv=F.fl[b.recv]; if(!(man&&F.manualOn)){ rv.tx=b.x; rv.ty=b.y; }
-    if(hyp(rv.x-b.x,rv.y-b.y)<4){ F.ball={st:'held',f:b.recv,x:b.x,y:b.y,z:4}; F.cool=.12; }
+    if(hyp(rv.x-b.x,rv.y-b.y)<4){ F.ball={st:'held',f:b.recv,x:b.x,y:b.y,z:4}; F.cool=gatherT(b.recv); }
   }
   if(man) manualField(dt); else F.ctrl=-1;
   F.fl.forEach((f,i)=>{
@@ -1546,6 +1559,8 @@ function updateField(dt){
     if(r.delay>0){ r.delay-=dt; continue; }
     if(r.pos===r.target) continue;
     const dir=Math.sign(r.target-r.pos); r.pos+=dir*r.spd/90*dt;
+    // rounding a base: a runner reads the play before he gets there and keeps going if the ball is still deep
+    if(dir>0&&!F.hr&&!F.gr&&r.target<4&&r.peek!==r.target&&r.target-r.pos<.3){ r.peek=r.target; roundBase(r); }
     if((dir>0&&r.pos>=r.target)||(dir<0&&r.pos<=r.target)){
       r.pos=r.target; { const q=runnerXY(r); puff(q[0],q[1],4); }
       if(r.pos===4){ r.scored=true; addRuns(1); F.runsPlay++; SFX.score(); const h=BASE[0]; F.pops.push({x:h[0],y:h[1],t:0,s:'RUN'}); }

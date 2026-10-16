@@ -809,326 +809,76 @@ function buildPitchBG(){
 function polyPath(g,pts){ g.beginPath(); pts.forEach((p,i)=>i?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1])); g.closePath(); }
 let bgWorld=null,bgPitch=null;
 
-/* ---------------- bodies ---------------- */
-// Players are posed skeletons: tapered capsule limbs, a shaded torso and a rounded head, outlined per layer.
-const INK='#130f18';
+/* ---------------- players ---------------- */
 const snap=v=>Math.round(v*RS)/RS;
 function shadowEll(x,y,rx,ry){ ctx.fillStyle='rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(x,y,rx,ry,0,0,7); ctx.fill(); }
-function capsule(a,b,ra,rb){
-  const p=new Path2D(),th=Math.atan2(b[1]-a[1],b[0]-a[0]),nx=-Math.sin(th),ny=Math.cos(th);
-  p.moveTo(a[0]+nx*ra,a[1]+ny*ra); p.lineTo(b[0]+nx*rb,b[1]+ny*rb);
-  p.arc(b[0],b[1],rb,th+Math.PI/2,th-Math.PI/2,true);
-  p.lineTo(a[0]-nx*ra,a[1]-ny*ra);
-  p.arc(a[0],a[1],ra,th-Math.PI/2,th-1.5*Math.PI,true);
-  p.closePath(); return p;
+/* ---------------- hand-drawn sprites, R.B.I. Baseball style ----------------
+   Pixel art, one letter per pixel, coloured from the team's kit; artCanvas adds a 1px dark outline around the figure.
+   H cap/helmet, h its shade, w cap shine, S/s skin, E eyes, J/j jersey, A dark sleeves, P/p pants, O socks, B/b shoes, L belt,
+   T/t bat, G/g glove, M/m catcher's helmet. The batter is seen from behind (right-handed, mirrored for lefties) with his number
+   painted on his back; field runners face right. */
+const ART={bat:{"stance":[".....TTTT........................",".....tTTTT.......................",".....ttTTTT......................",".......ttTTT...HHHHHHHHH.........","........ttTTTEHHHHHHHHHHHH.......",".........ttTTTEHHHHHHHHHwHH......","..........ttTTTEHHHHHHHHHHH......","...........EttTTEEHHHHHHHHH......","............EEtTTTEHHHHHHHH......","............HHEtTTTEHHHHHHHH.....","............HHHHtTTTEHHHHHHHH....","............HHHHHEtTTEHHHHHE.....","............HHHHHHEEtTEEEEH......",".............HHHHHHEEtEEtEE......",".............EEEEEHHHEESSSE......","............EEEsssEEEESSSSS......","..........jJJJEEEESssESSSSSE.....",".........JJJJJJjEJEEESSSSSsESE...","........JJJJJJjEEEEESSSSSsEEESS..","........JJJJJEsSSEESSSSSsEEEEEEE.","........JJJJEESSSESSSSSSsEEEEEEs.","........jJJJEsSSSSSSsSSsEEjEEEsE.","........jjjEEssSSSSssSSsEJjEsEESS",".........jjEssSSSSssSSsEJJJEsSSSS",".........EEEEsSSSSSSSsEEJJJEsSSSS","..........jEEEsssSSssEEJJJjEsSSSS","..........jjjEEEEsssEEjjJj..ssSSs","...........jjjjjEEEEEJjJJ.....ss.","...........jjJJJJjjJJJjJJ........","............jjJJJJJJJjJJJ........","............jjJJJJJJJjJJ.........","............EjJJJJJJJJJJ.........","............EEEEEJJJjJJj.........","...........EPEEEPEEEEEEE.........","...........PPPEPPEEEppEPP........","..........PPpPPPPPPPPPPPPP.......","..........PPpPPPPPPPPPPPPPP......","..........PPPPPPPPpPPPPPPPPP.....","..........pPPPPPPPPEpppPPPPPP....","...........PPPPPPPPEEEppPPPPP....","............PPPPPPPpEppppPPPPP...","............PPPPPPPPEpppppPPPP...","............pPpPPPPPE.ppppPPPPP..","............pPpPPPPP...EpppPPPP..",".............ppPPPPE....EppPPp...","............pPPPpPP.....pppPPp...","...........PPPPPPpp.....ppPPP....","...........PpPPPPP......ppPPP....","...........PPPPPP.......ppPPp....","..........PPPPPPP.......pPPP.....","..........PPPPPP........pPPP.....","..........PPPPPp........EEEEE....","..........EEEEE.........EEEEEE...","..........EEEEEE................."],"load":["........TTTT........................","........tTTTT.......................","........ttTTTT......................","..........ttTTT...HHHHHHHHH.........","...........ttTTTEHHHHHHHHHHHH.......","............ttTTTEHHHHHHHHHwHH......",".............ttTTTEHHHHHHHHHHH......","..............EttTTEEHHHHHHHHH......","...............EEtTTTEHHHHHHHH......","...............HHEtTTTEHHHHHHHH.....","...............HHHHtTTTEHHHHHHHH....","...............HHHHHEtTTEHHHHHE.....","...............HHHHHHEEtTEEEEH......","................HHHHHHEEtEEtEE......","................EEEEEHHHEESSSE......","...............EEEsssEEEESSSSS......",".............jJJJEEEESssESSSSSE.....","............JJJJJJjEJEEESSSSSsESE...","...........JJJJJJjEEEEESSSSSsEEESS..","...........JJJJJEESSEESSSSSsEEEEEEE.","...........JJJJEESSSESSSSSSsEEEEEEs.","...........jJJJEsSSSSSSsSSsEEjEEEsE.","...........jjjEEssSSSSssSSsEJjEsEESS","............jjEssSSSSssSSsEJJJEsSSSS","............EEEEssSSSSSSsEEJJJEsSSSS",".............jEEEsssSSssEEJJJjEsSSSS",".............jjjEEEEsssEEjjJj..ssSSs","..............jjjjjEEEEjJjJJ.....ss.","..............jjJJJJjjJJJjJJ........","...............jjJJJJJJJjJJJ........","...............jjJJJJJJJjJJ.........","...............EjJJJJJJJJJJ.........","...............EEEEEJJJjJJj.........","..............EPEEEPEEEEEEE.........","..............PpPEPPEEEppEPP........",".............PPpPPPPPPPPPPPPPP......",".............PPpPPPPPPPPPPPPPPP.....",".............PPpPPPPPpPPPPPPPPPPP...",".............pPPPPPPPPEppppPPPPPPP..","..............PPPPPPPPEEEppppPPPPP..","...............PPPPPPPpEppppppPPPP..","...............PPPPPPPPE..pppppPPP..","...............pPpPPPPP.....EEpPPp..","...............pPpPPPPP.....ppPPPP..","................ppPPPPE.....ppPPP...","...............pPPPpPP......ppPPP...","..............PPPPPPpp.....ppPPP....","..............PpPPPPP......EpPPP....","..............PpPPPP.......EEPP.....",".............PPPPPPP.......EEEE.....",".............PPPPPP..........EEE....",".............PPPPPp............E....",".............EEEEE..................",".............EEEEEE................."],"contact":[".......EHHHHHHHH........................",".....EHHHHHHHHHHHH......................",".....HHHHHHHHHHHHH......................","....EHHHHHHHHHHHHHH.....................","....HHHHHHHHHHHHHHH.....................","....HHHHHHHHHHHHHHH.....................","....HHHHHHHHHHHHHHEE....................","....HHHHHHHHHHHHHEHHH...................","....HHHHHHHHHHHHHHE.....................","....HHHHHHHHHHHEHH......................",".....HHHHHHHHHEEEH......................","......EEEEHHHHEEEH......................","......EEEEEEHHHEHH......................",".....EESSSssEHHHH.......................","....EjEEEEEEEEEEE.......................","...EJJJJJJJJJJEjjj......................","...jJJJJJJJJJjJJJJJJ....................","...jJJJJJJJJJjJJJJJJJEEEsSEEEEEETTTTTTTt","...jJJJJJJJJJjJJJJJJJEEESSEEtttttttttttt","....JJJJJJJJJJjJJJJJJEESSSSs............","....JJJJJJJJJJEEjJJJJESSSsS.............","....JJJJJJJJJJJjEjJJESSSs...............",".....JJJJJJJJJjjjEEEsss.................",".....JJJJJJJJJJJjjEE....................",".....jJJJJJJJJJJJjj.....................","......JJJJJJJJJJJJjE....................","......jJJJJJJJJJJJjE....................",".......JJJJJJJJJJEEE....................",".......EEEEEEEEEEEEE....................","........EEEEEEEEEPPPp...................","........EEPPPEEEPPPPP...................","........pPPPPPPPPPPPPP..................","........PPPPPPPPPPPPPPp.................","........PPPPPPPPPPPPPPPp................","........EPPPPPPPPppPPPPP................",".......EppEEEEppppPPPPPPp...............",".......ppppppE..pppPPPPPP...............","......Epppppp.....ppPPPPPp..............",".....Epppppp.......ppPPPPP..............","....EpPPPppp........ppppPPp.............","...EEEEEPpp.........EppPPPP.............","..EPPJJEEpp..........ppPPEEE............",".EEPPPJJE.............EEEEJJ............","EEEEPJJ...............EJJJJJJ...........","EEEEJJ.................PPPJJJ...........","EEEEE...................PPPJJP..........",".EEE....................PPPPJPE.........",".EEEE...................EEEEEEEE........",".EEEEE..................EEEEEEEEE......."],"follow":["..................HHHHHHE................","................HHHHHHHHHH...............","...............EHHHHHHHHHHH..............","...............HHHHHHHHHHHHE.............","...............HHHHHHHHHHHHH.............","...............HHHHHHHHHHHHH.............","...............HHHHHHHHHHHhHH............","...............HHHHHHHHHEHHHHE...........","...............HHHHHHHEHHEEE.............",".......EEE....EHHHHHHEEEHEE..............","....SESSSSEEsSEEhHHHHHHHHES..............","....sEssSSEsSsEEEEEEEHHHESS..............",".....EssssEsSsEEEEEEEEEEES...............","......ssssEEEEEETTTTTEEEEE...............","......SSs..sESEEEttTTTTTTTE..............",".....SSS....EEEEEEEEEtTTTTTTTTE..........",".....SSSE..EEEJJJJjEEEEEttTTTTTTTTTTEEEE.","....ESSSEEEEJJJJJJJJJjEEEEEttTTTTTTTTTTTE","....SSSSEEJJJJJJJJJJJJjjjjjEEEtttTTTTTTTT","....SSSSsEJJJJJJJJJJJJjJJjjjE....tttTTTTt","....SSSSsEJJJJJJJjJJJJjJJJjE.........ttt.","....sSSSsEjJJJJJjjJJJJjJJJj..............",".....EEEEEEJJEEEEjJJJJJJJJE..............","............EEEjjJJJJjJJJJ...............",".............EjjJJJJJjJJJ................","..............jjJJJJjJJJj................","..............jJJJJJJJJJj................","..............jJJJJJJJJj.................","..............jjJJJJEEEE.................","..............EEEEEEEPPPP................","..............EPppPPPPPPPP...............",".............pPPPPPPPPPPPP...............","............pPPPPPPPPPPPPP...............","...........pPPPPPPPPPPPPPp...............","..........pPPPPPPPPPpEEppp...............",".........EPPPPPPPppEEEppppp..............",".........PPPPPPPpp..EpppppE..............","........EPPPPPpp.....ppppEEE.............","........EPPppEE.......ppppEEE............","........EPPPPPE.......EppEjJJj...........","........EPPPPpE........pEjJJJJ...........",".........EEEEEE.........EjJJJJJ..........",".........EJJJjE..........EjJJJJE.........",".........EJJJJE............jJjEEEE.......","..........JJJJ..............EEEEEE.......","..........JJJj...............EEEE........",".........EEEEE...............EEEE........","........EEEEEEE..............EEE.........","......EEEEEEEEE.............EEEE........."],"bunt":["...............HHHHHHHH.....................",".............HHHHHHHHHHHE...................","............HHHHHHHHHHHHH...................","............HHHHHHHHHHHHHE..................","...........HHHHHHHHHHHHHHE..................","...........HHHHHHHHHHHHHHHE.................","...........HHHHHHHHHHHHHHEHE................","...........HHHHHHHHHHHHHHEE.................","...........HHHHHHHHHHHHEEE..................","............HHHHEEEHHHHEEE..................","............EEEEEEEEEHHEHE..................",".............EEEEEEEEEHHH...................","............EEEEEEEEEEEE.........E..........","..........EEEJJJJJJJEEEEE..EEEEEETEEEEEEEEET",".........EJJJJJJJJJJJJjJEEESSEEEETEEtTTTTTTT","........EjJJJJJJJJJJJjJJJjESsEEETTEEEEEEEEE.","........jjjJJJjJjJJJJjJJJJjEEEsSTt..........","........JEJJJjJJjJJJJjJJJJJEEsSSs...........","........jEJJJjJJjJJJJEJJJJJEESSS............",".........EJJjjJJjJJJJEJJJJJESSSE............",".........EjjjjJJjjjjjEEJJJEsSSS.............",".........EJJJjJJJJJJjjEEEEsSSSE.............",".........JJJJjJJJJJJJjjEEEsSSs..............",".........JJJJjJJJJJJJJjEE...................",".........JJJJJJJJJJJJJjE....................",".........JJJjJJJJJJJJjjE....................",".........jjJjJJJJJJJjjjE....................","..........EEEEEEEEEEEEE.....................","..........PEEEPPEEEEEPEE....................",".........pPPPPPPPPPPPPPPE...................","........pPPPPPPPPPPPPPPPPE..................",".......pPPPPPPPPPPPPPPPPPPE.................","......pPPPPPPPPPPPPPPPPPPPPE................","......PPPPpPPPPPPPPPpPPPPPPPE...............",".....pPPPPPppp....ppPPPPPPPPPE..............",".....PPpPPPPp.......pppPPPpPPE..............","....pPPppppp..........pppppPPE..............","....PPPPPpp............ppPPPPE..............","....EEEEPp..............ppEEEE..............","....JJJJEE..............EEJJJE..............","....JJJJJ................JJJJE..............","....JJJJJ................JJJJE..............","...JJPPP..................PPPJE.............","...JPPP...................EPPJE.............","...JPPP...................EPPPEE............","..EEEEE...................EEEEEEE...........",".EEEEEE...................EEEEEEEE.........."]},
+  pit:{"set":[".................hhHHHHHHHhh.................","...............hhHHHHHHHHHHHhh...............","..............hhHHHHHHHHHHHHHhh..............","..............hHHHHHHHHHHHHHHHh..............",".............hhHHHHHHHHHHHHHHHhh.............",".............hhHHHHHHHHHHHHHHHhh.............",".............hhHHHEEEEEEEEEhHHhh.............",".............hhHEEHHHHHHHHHEEHhh.............",".............hEEhHHHHHHHHHHHHEEh.............",".............EhHHHHHHHHHHHHHHHhE.............","............EEhHHEEEEEEEEEEEhHhEE............","...........sEEEEEGGGsssssGssEEEEES...........","...........SEEEssEEsssssGGEEssEEES...........","...........SsEsssEPSSSSSSSEPsssEsS...........","...........SSESSSEESSSSSSSEESSSESS...........","............SESSSEESSSSSSSEESSSES............",".............ESSSSSSSSSSSSSSSSSE.............",".............EsSSSSSESSSESSSSSsE.............","............jjEsSSSSSEEESSSSSGEjj............","..........jJJJjEGSSSSSSSSSSSGEjJJJj..........",".........jJJJJJjEEGSSSSSSSGEEjJJJJJj.........",".........JJJJJJJjjEEEEEEEEEjjJJJJJJJ.........","........jJJJJJJJJJjjjsssjjjJJJJJJJJJJ........","........JJJJJJJJJJEEEgsjjEEEEJJjJJJJJ........",".......jJJJJJjJJJESSSEjjEggggEEjjJJJJJ.......",".......jEEEjjjjjESsSSEEEggEEgggEEjjEEE.......",".......EGSSEEEEESSsEEPPEEEgggggggEESSG.......",".......GSSSSSSSSSSEEPPEgggggggEEggESSS.......",".......SSSSSSSSSSSEpPPEggggEggESEgESSS.......",".......SSSSSSSSSSSEpPPEEEEEgggESEgESSS.......",".......GGSSSSSSGGGEpppEgggggggESEgESSG.......",".........GGGGGGEEEEEppEggggEgggEEgEGG........",".............EEEjjjjEEEEEEEggggEgg...........","..............EEEEEEEEEEggggEgggg............","..............PEEPEEEppEEEEEgggE.............",".............pPPPPEEEpppEggggEEp.............",".............PPPPPPPPPPPPEEEEPPp.............",".............PPPPPPPPPPPPPPPPPPP.............","............pPPPPPPPPPPPPPPPPPPPp............","............PPPPPPPPp...pPPPPPPPP............","............PPPPPPPp.....pPPPPPPP............","...........pPPPPPPp.......pPPPPPPp...........","...........PPPPPPPp.......pPPPPPPP...........","...........jPPPPPp.........pPPPPPJ...........","...........JJJJJJg.........EJJJJJJ...........","...........JJJJJj...........jJJJJJ...........","...........JJJJjj...........gjJJJJ...........","..........EEEEJj.............jJEEEE..........",".........EEEEEEE.............EEEEEEE.........","........EEEEEEEE.............EEEEEEEE........"],"kick":["......................hhHHHHHHHhhE.................","....................EhHHHHHHHHHHHhh................","...................EhHHHHHHHHHHHHHHh...............","...................EHHHHHHHHHHHHHHHhE..............","..................hhHHHHHHHHHHHHHHHhh..............","..................EhHHHHHHHHHHHHHHHhh..............","..................EhHHHEEEEEEEEEhHHhh..............","..................EhhEEhHHHHHHHHEEhhh..............","..................EEEhHHHHHHHHHHHHhEh..............","..................EEhHHHHHHHHHHHHHHhE..............",".................EEEHHEEEEEEEEEEEhHhEE.............","................SEEEEEsssGGGGGsssEEEEES............","................SEEEEsEEsGGGGGsEEEsEEESEp..........","................SsEEGsEPSSSSSSSEPGGGESSEp..........","................SSEESSEESSSSSSSEEESSESS............",".................SEESSEESSSSSSSEEESSESEp...........","..................EESSSSSSSSSSSSSSSSEE.............","...................ESSSSSESSSESSSSSGEE.............","..................EEESSSSSEEESSSSSsEjjE............","................jJJjEGSSSSSSSSSSSGEjJJJj.p.........","...............jJJJJjEEGsEEEEESGEEjJJJJJj..........","...............JJJJJJjjEEgggggEEEjJJJJJJJE.........","..............jJJJJJJJEsEgggggggEEjjJJJJJJ.........",".............EJJJJJjjESEEEEEEgggggEjJjEEEE.........",".............jEEEEJEESSEEggggggEEggEEESSsG.........",".............EGGGEESSSSEgggggggESEEESSSSSS.........",".............GSSSSSSSSSEEEEEEggESEEESSSSSS.........",".............SSSSSSSSSSEgggggggESEEESSSSSG.......EE",".............GSSSSSSSGGGEgggggggEEgEGGGGGE.......EE","..............SSSSSGGEEEEEEEEEggggEEEEEEEEE.....EEE","...............GGGGEEEjjEggggggggEEEEppPPPPPJJJEEEE","....................EEjjjEEEEEEEEEEppPPPPPPJJJJJEEE",".....................EjjjjjEEpppEEEPPPPPPPPJJJJJEEE","......................jjjEEEEppppPPPPPPPPPPJJJJJEEE","......................EEEPEEEpPPPPPPPPPPPPPJJJJEEEE","......................EEEPPPPPPPPPPPPPPPPppJJE.....","......................pPPPPPPPPPPPPpppppE..........","......................pPPPPPPPPPpppE....p..........","......................PPPPPPPPPpE..................","......................PPPPPPPPpE...................","......................PPPPPPPPp....................","......................PPPPPPPpE....................","......................PPPPPPPp.....................","......................pPPPPPpE.....................",".......................JJJJJj......................",".......................JJJJJj......................",".......................JJJJJj......................",".......................EEEEJj......................","......................EEEEEEE......................",".....................EEEEEEEE......................"],"cock":["..................hhHHHHHHhhE................","................hhHHHHHHHHHHhh...............","..EPPP.........hhHHHHHHHHHHHHHh..............",".EPPPPP........hHHHHHHHHHHHHHHh..............","SEPPPPP.......hhHHHHHHHHHHHHHHhh.............","SEpPPEEE......hhHHHHHHHHHHHHHHhh.............","SEEppESS......hhHHHEEEEEEEEhHHhh.............","SSEEEEES......hhhEEhHHHHHHHEEhhh.............",".SSGGSSS......EEEhHHHHHHHHHHHEEh.............",".SSSSSG.......EhHHHHHHHHHHHHHHhE.............","..SSSSE......EEhHHEEEEEEEEEEHHhEE............","..SSSSS.....sEEEEEssGGGGGsssEEEEES...........","..SSSSS.....SEEEssEEGGGGssEEssEEES...........","..sSSSSG....SSEsssEPSSSSSSEPGssESS...........","...SSSSSE...SSESSSEESSSSSSEESSSESS...........","...SSSSSSG.EESESSSEESSSSSSEESSSES............","...GSSSSSsEjEEESSSSSSSSSSSSSSSSEEp...........","....SSSSGsEJJJEGSSSSSESSSSSSSSGEp............","....GsSGGEjJJJjEGSSSSSEESSSSSGEgE............",".....EGGEjJJJJJjEGSSSSSSSSSSGEjJJj...........","......EEEjJJJJJJjEEGSSSSSSGEEjJJJJj..........",".......EgjjJJJJJJjjEEEEEEEEjjJJJJJJj.........",".........jjjJJJJJJjjsssjjJJJJJJJJJJJ.........","...........jjJJJJJJjjsjjJJJJJJJJJJJJJ........","............jJJJJJJJjjjJJJJEEEEJJJJJJ........","............jjJJJJJJJjJJJJEggggEEjjEEE.......","............jjJJJJJJJjJJJEggEEgggEEGGG.......","............gjJJJJJJJjJJEEEEgggggggESS.......",".............jJJJJJJJjJJEgggggggEEggES.......",".............jjJJJJJjJJJEggggEEgESEgES.......",".............jjJJJJJjJJJEEEEEgggESEEES.......",".............EEjJJJJjJJJEgggggggESEEEE.......",".............EEEEJJJjJJJEggggEgggEEEE........",".............PEEPEEEEEEEEEEEEEgggEgg.........","............pPPPPEEpppEEEEggggEgggg..........","............pPPPPPPppppPPEEEEEgggE...........","............pPPPPPPPPpPPPPEggggE.............","............pPPPPPPpEpPPPPPEEE...............","............pPPPPPpEEPPPPPPPE................","............pPPPPppEEPPPPPPP.................","............pPPPPpEEEPPPPPPp.................","............ppppppEpEpPPPPPE.................","............EppppE...pPPPPp..................",".............pppEE...jJJJJJ..................","..............EEEE...jJJJJJ..................","...............EEE...jJJJJ...................","...............EEE...jJJJJ...................",".....................gEEEE...................",".....................EEEEE...................",".....................EEEEEE.................."],"release":["...........................hhHHHHHHHHHH........",".........................hhHHHHHHHHHHHHHH......","........................hhHHHHHHHHHHHHHHH......","........................hhHHHHHHHHHHHHHHHH.....","..........EPPP.........hhHHHHHHHHHHHHHHHHH.....",".........EPPEEE........hhHHHHHHHHHHHHHHHHH.....",".........EpPESSs.......hhHHHHHHHHHHEEEEEEE.....",".........SEESSSSG......hhHHHHHHHEEEhHHHHHHH....",".........SSSSSSSSSS....hhHHHHhEEHHHHHHHHHHHHHh.",".........ESSSSSSSSSSG.EhhhhhEEhhHHHHHHHHHHHHHHh","..........GGGGGSSSSSSSEEEEEEEEEEEEEEEEEEEEE....","...............GSSSSSSSEESGEEGGGGEEsssGEEG.....","................GSSSSSSsEssEGGGGGEPGGGGEPG.....",".................GSSSSSsEESGGSSSSEESSSSEES.....","..................GSSSSsGEEsSSSSSEESSSSEES.....","..................EGGGGsEjjESSSSSSSSSSSSSS.....","...................GGGGEjJJEGSSSSSESSSSSSS.....","...................EEEEjJJJjEGSSSSSEEGSSS......","....................jjjjJJJJjEGSSSSSSSSSS......","....................jjjjJJJJJEEEGSSSSSS........","....................EjjjjJJJJJEgEEEEEE.........",".....................jjjjJJJJJJjjssjjj.........",".....................jjjjJJJJJJJJjsjjjj........",".....................jjjjJJJJJJJJjjjJjj...ggE..","....................jjjjJJJJJJJJJJjJJjjE.ggEgg.","....................jjjJJJJJJJJJJJjJJEjjEgEEgg.","....................jjJJJJJJJJJJJjJJjEjjEgEgEgg","...................jjjJJJJJJJJJJJjJJjEjjEgEggEg","...................jjjJJJJJJJJJJjJJjEEEEEEgEgEg","...................EjJJJJJJJJJJJjJJjEGGEEggEggg","..................EEEEjJJJJJJJJjJJjEssEgEgggggg","..................pEPEEEEJJJJJjjjjEGGsEggEggEgE",".................ppPPEEPEEEEEEEEEEEEssEggggggg.",".................pPPPPPPEEEEpppEpppEEGGEggEgg..",".................pPPPPPPPPPppppppppppEEEgggg...","................pPPPPPPPPPPPPpppppppppEp.......","................pPPPPPPPPPPpppppppppppp........","...............pPPPPPPPPPpEEppppppppppp........",".............jPPPPPPPPPPp....Eppppppppp........","........EEEJJJPPPPPPPPPp........ppppppg........","........EEJJJJPPPPPPPPp..........ppjjjj........",".......EEEJJJJJPPPPPp............gjjjjj........",".......EEEJJJJJjpppp..............jjjjj........","......EEEEEjjjj...................jjjEEE.......","......EEEE........................EEEEEEE......","......EEE.........................EEEEEEEE....."],"follow":[".......................hhHHHHHHHHHH..............",".....................hhHHHHHHHHHHHHHH............","............pPPP....hhhHHHHHHHHHHHHHH............","...........EPPPPP...hhHHHHHHHHHHHHHHHH...........","..........SGEpPPPE.hhhHHHHHHHHHHHHHHHH...........","..........sssEpPPEEhhHHHHHHHHHHHHHHHHH...........",".........SSssEpEE.EhhHHHHHHHHHhEEEEEEEE..........",".........SESEEEE...hhHHHHHHHEEEHHHHHHHHE.........",".........SSEEGGS...hhHHHHHEEHHHHHHHHHHHHHH.......",".........sSSSSSS...hhHHHHEhHHHHHHHHHHHHHHHh......",".........sSSSS.....EEEEEEEEEEEEEEEEEEEE..........",".........SSSS......ESSEEEssssEPssssEPG...........","........GSSSS......ESGSEGGGssEEssGGEEG...........","........SSSSS......ESGsESSSSSEESSSSEES...........","........SSSSSE......EGGSSSSSSSSSSSSSSS...........","........SSSSSSEJ...EEEsSSSSSSSSSSSSSSS...........","........SSSSSSEJJJJJjEEssSSSSSEEEEESSS....EgEg...","........sSSSSGEJJJJJJjEEssSSSSSEEESSS....ggEggg..",".........SsSSEjJJJJJJJJEEEGGSSSSSSSS....EgEgEgEg.","..........GGGEJJJJJJJJJJjEEEEEEEEEEE....EEgggEgg.","............EgJJJJJJJJJJJJjjjssssjjjj..EggEggEggg",".............gjjJJJJJJJJJJJjjjssjJJjjjEEEggEggggg","..............EjjjjJJJJJJJJJJjjjjJJJjjEgEgggggggg","................EjjjJJJJJJJJJJJjJJJjjjEggEggggEEg",".................EjjJJJJJJJJJJJjJJJjjjEEgEgggESgE","..................jjJJJJJJJJJJJjJJJEjjEEgggEgSEg.","..................jjJJJJJJJJJJJjJJJEjgEsEgggEEgg.","..................jJJJJJJJJJJJJjJJEEgEGssEggggg..","..................jJJJJJJJJJJJjjJJE..EssssEEEE...","..................jJJJJJJJJJJJjJJJ.....sGGGss....",".................jjJJJJJJJJJJJjJJj...............",".................gjJJJJJJJJJJJjJjj...............",".................EEEjJJJJJJJJjJJj................",".................EEEEEjjJJJJJjJJE................",".................pEEPEEEEEEEEEEEEE...............",".................pPPPEEEPEEEpppEppp..............","................pPPPPPPPPEEEppppPPPPP............","................pPPPPPPPPPPPPPPPPPPPPp...........","...............pPPPPPPPPPPPPPPPPPPPPPPp..........","...............PPPPPPPPPPppppppPPPPPPPP..........","..............pPPPPPPPPPp....pppPPPPPPPp.........","..............PPPPPPPPPp.......ppPPPPPPp.........",".............pPPPPPPPp..........ppPPPPPp.........","............jpPPPPPPp............ppPPJJJ.........","...........jJJJPPPPp.............EjJJJJJ.........","...........JJJJJJjg...............jJJJJJ.........","..........jJJJJJJj................jJJJJJ.........","..........jJJJJJg..................JJJJj.........",".........EEEEJjE...................jJEEEE........","........EEEEEEE....................EEEEEEE.......",".......EEEEEEEE....................EEEEEEEE......"]},
+  fld:{"stand":[".............HHHHHH..............","............HHHHHHHH.............","............HHHHEEEEE............","............HHHEHHHHHh...........","............EEEEEEEEE............","............SESSESES.............","............SESSESES.............","............SSSSSSSS.............",".............SSSSSSS.............","............EESSSSSEE............","..........JJJjEEEEEJJJ...........",".........JJJJJJjjjJJJJJ..........","........JJJjJJJJJJJJjJJJ.........","........EJjEjJJJJJJjEjJE.........","........jEEEjJJJJJJjEEEj.........","........jj.EjJJJJJJjE.jj.........",".......jj...jjjjjjjj...EE........",".......SS...EEEEEEEE...gg........",".......SSS.EPPPPPPPPE.gggg.......",".......SSSEpPPPPPPPPpEgEgg.......",".........EpPPPp..pPPPEgEgg.......","..........PPPp....pPPpEggg.......","..........PPPp....pPPPE..........","..........JJJ......JJJ...........","..........JJJ......JJJ...........",".........EEEE......EEEE.........."],"runA":["...........HHHHHH................","..........HHHHHHHH...............","..........HHHHEEEEE..............","..........HHHEhHHHHH.............","..........EEEEEEEEE..............","..........SESSESES...............","..........SESSESES...............","...........SSSSSSS...............","..........EESSSSSS...............",".......jJJJjESSSS................",".....jjEJJJJjEEEE...SS...........",".....jj.jjJJJjjjJ...SS...........","....jj...EjJJJJJJJ.jjS...........","....SSS.EjJJJJJJJEjjj............","....SSS.EjJJJJJJEEjj.............",".........jjJJJJJE................",".........EEJJJJj.................",".........pPEEEEE.................","........pPPPPPPPP................","...E...pPPPPpPPPPP...............","..EEJJpPPPP...ppPPP..............",".EEJJJPPPP......pPJJ.............",".E....pPP........JJJ.............","..................JJJ............","...................JEEE..........","...................EE............"],"runB":["..........HHHHHH.................",".........HHHHHHHH................",".........HHHHEEEEE...............",".........HHHEHHHHHH..............",".........EEEEEEEEE...............",".........SESSESES................",".........SESSESES................","..........SSSSSSS................",".........EESSSSSS................","......jJJJjESSSS.................","....jjEJJJJjEEE..................","....jjjEEjJJjjjJ.................","....jjEEjJJJJJJJE..SS............","....jjSEjJJJJJJEjjjSS............",".....SSEjjJJJJEEjjjE.............",".....SSEEjjJJJE..................","......EpPEEEEE...................",".......pPPPPP....................",".EEJ..EEpPPPPP...................","EEJJJEppEppPPPP..................","E..JJppppE.pPPPP.................",".....pppp...pPPP.................",".............pJJJ................","..............JJJ................","...............JJE...............","................EEE.............."],"throw":["..................HHHHHH...........",".................HHHHHHHH..........",".................HHHHEEEEE.........",".................HHHEHHHHHH........",".................EEEEEEEEE.........",".................SESSSESE..........",".................SESSSESE..........","..................SSSSSSS..........","..................ESSSSSS..........",".................JEEEEEE.........PP","...............jEJJJJJJJE.........P",".............jjEJJJJJJJJEjjjjSSS...","............jEEEJJJJJJJJEjjj..SS...","............jjEJJJJjEEEEE..........",".............jEJJJJJjjEg...........","..............JJJJJJjEgg...........","..............EEJJJjjEg............","..............PPEEEEEE.............",".............pPPPPPppp.............","............EPPPPPppppp............","...........EPPPPp..ppppp...........","........EJJJPPPp.....ppp...........","........EJJJPPp.......JJ...........","........EE............JJ...........","........E.............JJE..........","......................EEEE........."],"catch":[".......................gEgE......","......................EgEgEg.....","..............HHHHHH.EgEggEg.....",".............HHHHHHHHEgggggg.....",".............HHHEEEEEEEggggg.....",".............HHEHHHHHHEEggg......",".............EEEEEEEEE.EEE.......",".............ESSESSES...jj.......",".............SSSESSES...jj.......","..............SSSSSSSE.jjj.......","..............SSSSSSSEEjj........",".............jESSSSSEJJEj........","...........JJJJEEEEEJJJJ.........","..........JJJJJJjjjJJJj..........","..........JJjJJJJJJJJj...........",".........jEjEjJJJJJJJ............",".........jj.EjJJJJJJj............","........jj...jJJJJJJj............","........jj...jjjjjjjj............","........SS...EEEEEEEE............","........SS...PPPPPPPP............",".............PPPPPPPP............","............PPPPE.pPPP...........","............PPpp..ppPP...........","............PPp....pPP...........","............JJj....jJJ...........","............JJj....jJJ...........","...........EEEE....EEEE.........."],"dive":[".....................................HHHHHH............","....................................HHHHHHHH...........","....................................HHHHEEEEE..........","....................................HHHEHHHHHH.........",".............................jjjjE.EEEEEEEEEE..........","...........................SSjjjEJJESESSESSE...........","...........................SS..EJJJESESSESSE...........","....................EE..........EjJJESSSSSSS.......gg..","...................EEJJ........jjJJJJESSSSSS......ggEE.","..................EE.JJJ....PEjJJJJJJjESSSSEE....ggEggg","......................JJppEPPEjJJJJJJJjEEEEJEjjjEggggEE",".......................ppEPPPPEJJJJJJJJJJJJEjjjjEgggggg","......................EEEPPPPPEjJJJJjjj..........ggggEE","..................EEJJJpPPPPPPpEjjjj..............gggg.","..................EJJJJpPPPpp..........................",".................EE....pppp............................",".................E....................................."],"hrA":["............HHHHHH...............","...........HHHHHHHH..............","...........HHHHEEEEE.............","...........HHHEHHHHHH............","...........EEEEEEEEE.............","...........SESSESSE..............","...........SESSESSE...SSS........","............SSSSSSS...SSS........","............ESSSSSS....SS........","...........JJESSSSEE..jj.........",".........JJJJJEEEEJJEjjj.........","........EJJJJJJjjJJJEjj..........","........jEJEjJJJJJJjj............","........jjEEjJJJJJE..............","........jjjSEjJJJJ...............",".........jSSSEJJJj...............","..........SSSEjjj................","...........EEPEEE................","...........pPPPPP................",".......E..EEppPPPP...............","......EEJJEpEEppPPP..............","......EEJJpppp.EpPP..............","......E...ppp...JJJ..............",".................JJ..............",".................JJE.............",".................EEEE............"],"hrB":[".............HHHHHH..............","............HHHHHHHH.............","............HHHHEEEEE............","............HHHEHHHHHH...........","............EEEEEEEEE............","............SESSESSE.............","............SESSESSE.............",".............SSSSSSS.............",".............ESSSSSS.............","............JJESSSS..............",".........EJJJJJEEEEE....SS.......","........jjEJJJJJjjJJJ...SS.......","........jj.EEjJJJJJJJE.jSS.......",".......jj...jjJJJJJEjEjjj........",".......SS...jjJJJJJEEjjj.........",".......SS...jjjJJJj..............","............EEEjjj...............","............pPPEEE...............","............pPPPPPP..............","............EppPPPPP.............",".......E...EpEEppPPPP............",".......EJJJpppp...pPJ............","......EEJJJppp.....JJJ...........","......E.............JJJ..........","....................EJEEE........",".....................EE.........."]},
+  catcher:[".................................................EEEEEEEEEEEEEEEEE","................................................MMMMMEMMMMMEEMMMMMM","............................................EEEEMMMMMEEMMMMEEMMMMMMEEEE","...........................................EEMMMMMMMMEEMMMMEEMMMMMMMMMEEE",".........................................EEMMMMMMMMMMEEMMMMMEMMMmmMMMMMMEE","........................................EEMMMMMMMMMMMMEMMMMMEMMMMMmmmMMMMEE",".......................................EEMMMMMMMMMMMMMEMMMMMEMMMMMMmmmMMMMEE",".......................................EMMMMMMMMMMMMMMEMMMMMEMMMMMMMmmmMMMME",".......................................EMMMMMMMMMMMMMMEMMMMMEEMMMMMMMmmMMMME","......................................MMMMMMMMMMMMMMMMEEMMMMEEMMMMMMMMMMMMMMM",".....................................EMMMMMMMMMMMMMMMMEEMMMMEEMMMMMMMMMMmMMMME",".....................................EMMMMMMMMMMMMMMMMEEMMMMEEMMMMMMMMMMMMMMME","....................................EMMMMMMMMMMMMMMMMMEEMMMMEEMMMMMMMMMMMMMMMME","....................................EMMMMMMMMMMMMMMMMMMEMMMMMEMMMMMMMMMMMMMMMME","....................................EMMMMMMMMMMMMMMMMMMEMMMMMEMMMMMMMMMMMMMMMME","....................................EMMMMMMMMMMMMMMMMMMEMMMMMEMMMMMMMMMMMMMMMME","....................................EMMMMMMMMMMMMMMMMMMEMMMMMEMMMMMMMMMMMMMMMME","....................................EMMMMMMMMMMMMMMMMMMEMMMMMEMMMMMMMMMMMMMMMME","....................................EMMMMMMMMMMMMMMMMMMEMMMMMEMMMMMMMMMMMMMMMME","....................................EEEMMMMMMMMMMMMMMMMEMMMMMEMMMMMMMMMMMMMMEEEE","...................................EEEEEEEEMMMMMMMMMMMMEMMMMMEMMMMMMMMMMMEEEEEEEE","................................EEmEEMMMMEEEEEEEMMMMMMMEMMMMMEMMMMMMEEEEEEEMMMEEEE","...............................EmmmEEMMMMMMMMMEEEEEEEEEEEEEEEEEEEEEEEEMMMMMMMMEEmmEE","...............................mmmEEEEMMMMMMMMMMMMMMMMMEMMMMMEMMMMMMMMMMMMMMMMEEmmmE","...............................mmEEEEEEEMMMMMMMMMMMMMMMEMMMMMEMMMMMMMMMMMMMMEEEEEmmE","...............................mmEEEEEEEEEMMMMMMMMMMMMMEMMMMMEMMMMMMMMMMMMEEEEEEEmmE","...............................mmEEmEEmMEEEEEEMMMMMMMMMEMMMMMEMMMMMMMMEEEEEMmEEmEmmE","...............................mmE...EmMMMMMEEEEEEEEEEEEMMMMMEEEEEEEEEEEMMMMmE...mmE",".............EEEEEEEE..........mmE...EmMMMMMMMMMMMMEEEEEEEEEEEEEEMMMMMMMMMMMmE...mmE",".........EEEEgggEgggEEEE.......mmE...EmmMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMmmE...mmE",".......EEgEggggEgggggEgEEE..m..mmE....EmMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMmmE....mmE",".....EEgggEggggEgggggEgggEEEEMEmmE....EmMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMmmE....mmE","....EEggggEggggEgggggEEEEggEEEEmmEEm..EEmmMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMmmEEEm.EmmE","...EEEgggEgggggEgggggEEEEgggEEEmmEEE.EEEmmmMMMMMMMMMMMMMMMMMMMMMMMMMMMMMmmmEEEEEEmmE","..EEgEgggEgggggEgggggEEm.EgggEEmmmEEEEEEEEmmMMMMMMMMMMMMMMMMMMMMMMMMMMMmmEEEEEEEmmmE","..EggEgggEgggggEgggggE....EEggEEEmmmmmEMEEEmmmMMMMMMMMMMMMMMMMMMMMMMMmmmEEEMEmmmmmE",".EgggEgggEgggggEgggggEE....EEEEEEEmmmmEMEEEEEEmmmmmmmmmmmmmmmmmmmmmmmmEEEEEMEmmmEE",".EgggEgggEEggggEggggEEgg....EggEEEEEEEEEMMEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEMMEEEEE","EggggEggggEggggEggggEEggg..EgggEEE.....EEMEGGEEEEEEEEEEEEEEEEEEEEEEEEEGGEMME","EggggEggggEggggEggggEEEgggEEggggE.......EMMEEGssEEEEEEEEEEEEEEEEEEEEsGEEMME","EggggEggggEggggEEgggEMgEggEgggggE........MMEEEEEEEEEEEEEEEEEEEEEEEEEEEEEMM","EggggEEggggEggggggggEEggEEEgggggE.......EEEEEEEEEEgjjjjjjjjjjjjjjjjEEEEEEEE","EgggggEggggEgggggggggEEgEEggggggE......EEEEEEEEEgjjjjjjjjjjjjjjjjjjgEEEEEEEEE","EgggggEgggggggggggggggEEEgggggggEEm.EEEEjjEEEEEEEjjjjjjjjjjjjjjjjjjEEEEEEEjjjEEEEEEE","EgggggEgggggggggggggggggggggggggEEEEEJJJjjjEEEEEEEjJJJJJJJJJJJJJJjEEEEEEEjjjjjEEEEjJEE","EggggggggggggEEEEEgggggggggggggEEEgJJJJJJJjjEEEEEEEJJJJJJJJJJJJJJEEEEEEEjjJJJjjjEEEjJJEE"]};
+function artKit(t,skin){
+  // a helmet the same colour as the jersey would melt into it, so darken it a step
+  const d=hex2rgb(t.cap).reduce((s,v,i)=>s+Math.abs(v-hex2rgb(t.jersey)[i]),0),H=d<70?shade(t.cap,.62):t.cap;
+  return {H,h:shade(H,.62),w:shade(H,1.7),S:skin,s:shade(skin,.78),E:'#0d0b10',J:t.jersey,j:shade(t.jersey,.72),A:shade(t.jersey,.45),
+  P:t.pants,p:shade(t.pants,.78),O:t.cap,M:'#26222c',m:'#5a5664',B:'#1c1820',b:'#4a4450',L:'#1c1820',T:'#d09a5c',t:'#8a5a30',G:'#8a5226',g:'#5a3214'}; }
+function artCanvas(rows,kit,flip,noGlove){
+  const h=rows.length,w=Math.max(...rows.map(r=>r.length)),W2=w+2,H2=h+2,on=new Uint8Array(W2*H2),c=document.createElement('canvas'); c.width=W2; c.height=H2; const g=c.getContext('2d');
+  rows.forEach((r,y)=>{ for(let x=0;x<r.length;x++){ let ch=r[x]; if(ch==='.') continue; if(noGlove&&(ch==='G'||ch==='g')) ch=ch==='G'?'S':'s';
+    const col=kit[ch]; if(!col) continue; const X=(flip?w-1-x:x)+1; g.fillStyle=col; g.fillRect(X,y+1,1,1); on[(y+1)*W2+X]=1; } });
+  g.fillStyle='#0d0b10';
+  for(let y=0;y<H2;y++) for(let x=0;x<W2;x++){ if(on[y*W2+x]) continue;
+    if((x>0&&on[y*W2+x-1])||(x<W2-1&&on[y*W2+x+1])||(y>0&&on[(y-1)*W2+x])||(y<H2-1&&on[(y+1)*W2+x])) g.fillRect(x,y,1,1); }
+  c.aw=w; c.ah=h; return c;
 }
-function ell(c,rx,ry){ const p=new Path2D(); p.ellipse(c[0],c[1],rx,ry,0,0,7); return p; }
-const KEYS=['pel','neck','head','sN','eN','hN','sF','eF','hF','hipN','kN','aN','hipF','kF','aF'];
-function lerpPose(A,B,t){ const o={front:A.front}; for(const k of KEYS) o[k]=lerp2(A[k],B[k],t); return o; }
-function swapSides(A){ const o={...A}; for(const k of KEYS) if(k.endsWith('N')) { const f=k.slice(0,-1)+'F'; o[k]=A[f]; o[f]=A[k]; } return o; }
-
-function ik(s,h,L1,L2,hint){
-  const dx=h[0]-s[0],dy=h[1]-s[1],d=Math.hypot(dx,dy)||1e-3,dc=Math.min(d,L1+L2-1e-3),ux=dx/d,uy=dy/d;
-  const a=(L1*L1-L2*L2+dc*dc)/(2*dc),hh=Math.sqrt(Math.max(0,L1*L1-a*a));
-  const c1=[s[0]+ux*a-uy*hh,s[1]+uy*a+ux*hh],c2=[s[0]+ux*a+uy*hh,s[1]+uy*a-ux*hh];
-  return hyp(c1[0]-hint[0],c1[1]-hint[1])<hyp(c2[0]-hint[0],c2[1]-hint[1])?c1:c2;
+const artCache=new Map();
+function artSprite(set,frame,t,skin,flip,noGlove){
+  const key=set+frame+t.abbr+t.jersey+t.cap+t.pants+skin+(flip?1:0)+(noGlove?1:0); let c=artCache.get(key);
+  if(!c){ c=artCanvas(set==='catcher'?ART.catcher:ART[set][frame],artKit(t,skin),flip,noGlove); artCache.set(key,c); }
+  return c;
 }
-function drawSkel(g,ox,oy,s,face,P,kit,opt){
-  if(opt.ik){ P={...P}; P.eN=ik(P.sN,P.hN,opt.ik[0],opt.ik[1],P.eN); P.eF=ik(P.sF,P.hF,opt.ik[0],opt.ik[1],P.eF); }
-  const T=v=>[ox+v[0]*s*face,oy-v[1]*s],R=r=>r*s,B=r=>r*s*(opt.bulk||1),o=opt.o||Math.max(.45,s*.05),front=!!P.front;
-  const J=kit.jersey,Js=shade(J,.7),Pn=kit.pants,Ps=shade(Pn,.76),Cp=kit.cap,sk=opt.skin,skS=shade(sk,.8),shoe='#1b1720';
-  const layer=sh=>{ g.lineJoin='round'; g.lineWidth=o*2; g.strokeStyle=INK; g.fillStyle=INK;
-    for(const [p] of sh){ g.stroke(p); g.fill(p); } for(const [p,c] of sh){ g.fillStyle=c; g.fill(p); } };
-  const leg=(hip,k,a,far)=>{
-    const pc=far?Ps:Pn,sc=far?shade(Cp,.72):Cp,toe=front?[a[0]+(a[0]<0?-.18:.18),a[1]-.12]:[a[0]+.45,a[1]-.13];
-    return [[capsule(T(hip),T(k),B(.28),B(.21)),pc],[capsule(T(k),T(lerp2(k,a,.5)),B(.21),B(.17)),pc],
-            [capsule(T(lerp2(k,a,.42)),T(a),B(.165),B(.13)),sc],[capsule(T(a),T(toe),B(.15),B(.12)),shoe]]; };
-  const arm=(sh,el,h,far,glove)=>{
-    const jc=far?Js:J,sc=far?skS:sk;
-    const out=[[ell(T(sh),B(.24),B(.24)),jc],[capsule(T(sh),T(el),B(.18),B(.145)),sc],[capsule(T(sh),T(lerp2(sh,el,.58)),B(.21),B(.18)),jc],[capsule(T(el),T(h),B(.145),B(.11)),sc]];
-    if(glove) out.push([ell(T(h),R(.32),R(.27)),far?'#6a3d1b':'#7d4a22']);
-    else out.push([ell(T(h),R(opt.batGloves?.15:.13),R(opt.batGloves?.15:.13)),opt.batGloves?(far?'#cfc6b2':'#efe6d2'):sc]);
-    return out; };
-  // torso, seat, neck, head
-  const body=()=>{
-    const pel=P.pel,nk=P.neck,chest=lerp2(nk,pel,.16),hd=P.head,w=front?1:(opt.tw||0),out=[];
-    out.push([capsule(T(lerp2(pel,nk,.1)),T(pel),R(.5+.12*w),R(.47+.1*w)),Pn]);
-    const a=T(chest),gr=g.createLinearGradient(a[0]-R(.7),0,a[0]+R(.7),0);
-    const lit=front||face<0; gr.addColorStop(0,lit?shade(J,1.12):Js); gr.addColorStop(.5,J); gr.addColorStop(1,lit?Js:shade(J,1.12));
-    out.push([capsule(a,T(lerp2(pel,nk,.12)),R(.6+.15*w),R(.47+.1*w)),gr]);
-    out.push([capsule(T(nk),T(lerp2(nk,hd,.55)),R(.15),R(.15)),skS]);
-    out.push([ell(T(hd),R(.36),R(.42)),sk]);
-    return out; };
-  const headwear=()=>{
-    const c=T(P.head),out=[],r=R(opt.helmet?.45:.4),cy=c[1]-R(.06);
-    const dome=new Path2D(); dome.arc(c[0],cy,r,Math.PI,0,false); dome.lineTo(c[0]+r,cy+R(.06)); dome.lineTo(c[0]-r,cy+R(.06)); dome.closePath();
-    out.push([dome,Cp]);
-    if(front) out.push([ell([c[0],cy+R(.04)],r*1.08,R(.1)),shade(Cp,.65)]);
-    else out.push([ell([c[0]+face*R(.42),cy+R(.03)],R(.27),R(.075)),shade(Cp,.65)]);
-    if(opt.helmet&&!front) out.push([ell([c[0]-face*R(.1),c[1]+R(.05)],R(.24),R(.28)),Cp]);
-    return out; };
-  const farLegFirst=front?[]:[leg(P.hipF,P.kF,P.aF,true)];
-  if(opt.pre) opt.pre(T,g);
-  if(!front&&!opt.leadOver){ layer(arm(P.sF,P.eF,P.hF,true,opt.glove==='F')); }
-  farLegFirst.forEach(layer);
-  if(front) layer([...leg(P.hipF,P.kF,P.aF,false),...leg(P.hipN,P.kN,P.aN,false)]);
-  else layer(leg(P.hipN,P.kN,P.aN,false));
-  layer([...body(),...headwear()]);
-  // details: belt, chest lettering, eyes, helmet shine
-  const pel=T(P.pel),nk=T(P.neck),bw=R(front?.58:.48),by=lerp2(pel,nk,.14);
-  g.fillStyle=INK; g.fillRect(by[0]-bw,by[1]-R(.07),bw*2,R(.14));
-  const ch=T(lerp2(P.pel,P.neck,.62));
-  g.fillStyle=Pn; if(front) g.fillRect(ch[0]-R(.28),ch[1]-R(.09),R(.56),R(.17)); else g.fillRect(ch[0]+face*R(.18)-R(.12),ch[1]-R(.1),R(.24),R(.2));
-  const hc=T(P.head);
-  if(s>4){ g.fillStyle=INK; if(front){ g.fillRect(hc[0]-R(.17),hc[1]-R(.02),R(.09),R(.09)); g.fillRect(hc[0]+R(.08),hc[1]-R(.02),R(.09),R(.09)); }
-    else g.fillRect(hc[0]+face*R(.2)-R(.05),hc[1]-R(.03),R(.1),R(.1)); }
-  if(opt.helmet&&s>8){ g.fillStyle='rgba(255,255,255,.45)'; g.beginPath(); g.ellipse(hc[0]-face*R(.12),hc[1]-R(.36),R(.16),R(.06),-.3*face,0,7); g.fill(); }
-  if(front){ if(opt.mid) opt.mid(T,g); layer([...arm(P.sF,P.eF,P.hF,false,opt.glove==='F'),...arm(P.sN,P.eN,P.hN,false,opt.glove==='N')]); }
-  else { if(opt.mid) opt.mid(T,g); if(opt.leadOver) layer(arm(P.sF,P.eF,P.hF,false,false));
-    if(opt.handsTop) layer([[ell(T(P.hF),R(.16),R(.16)),'#d8cfba']]);
-    layer(arm(P.sN,P.eN,P.hN,false,opt.glove==='N')); }
-  if(opt.ball){ const b=T(P.hN); g.fillStyle='#fff'; g.beginPath(); g.arc(b[0],b[1],R(.13),0,7); g.fill(); }
-}
-
-/* field & background players: posed, pre-rendered and cached per team, skin, frame and scale */
-const FP={
-  stand:{front:true,pel:[0,2.65],neck:[0,4.45],head:[0,5.05],sN:[-.55,4.25],eN:[-.72,3.5],hN:[-.55,2.9],sF:[.55,4.25],eF:[.72,3.55],hF:[.5,3.05],
-    hipN:[-.28,2.6],kN:[-.4,1.4],aN:[-.44,.22],hipF:[.28,2.6],kF:[.4,1.4],aF:[.44,.22]},
-  runA:{pel:[0,2.75],neck:[.3,4.45],head:[.42,5.02],sN:[.15,4.25],eN:[.5,3.6],hN:[.9,3.95],sF:[.15,4.25],eF:[-.25,3.6],hF:[-.55,3.15],
-    hipN:[0,2.7],kN:[.55,1.75],aN:[.45,.55],hipF:[0,2.7],kF:[-.35,1.55],aF:[-.95,.95]},
-  runB:{pel:[0,2.9],neck:[.3,4.6],head:[.42,5.17],sN:[.15,4.4],eN:[.25,3.7],hN:[.5,3.45],sF:[.15,4.4],eF:[.05,3.7],hF:[.3,3.4],
-    hipN:[0,2.85],kN:[.4,2.0],aN:[.05,1.25],hipF:[0,2.85],kF:[.15,1.5],aF:[0,.25]},
-  throw:{pel:[0,2.7],neck:[-.1,4.5],head:[-.12,5.08],sN:[-.15,4.3],eN:[-.6,4.6],hN:[-.95,5.15],sF:[.15,4.35],eF:[.6,4.2],hF:[.95,4.0],
-    hipN:[-.1,2.65],kN:[-.6,1.45],aN:[-.95,.25],hipF:[.1,2.65],kF:[.6,1.45],aF:[.95,.25]},
-};
-FP.runC=swapSides(FP.runA); FP.runD=swapSides(FP.runB);
-const fist=p=>({...p,eN:[.35,4.95],hN:[.4,5.75]});
-FP.hrA=fist(FP.runA); FP.hrB=fist(FP.runB); FP.hrC=fist(FP.runC); FP.hrD=fist(FP.runD);
-const sprCache=new Map();
+/* field players and runners: the hand-drawn field frames, cached per team, skin, frame and scale */
+const sprCache=new Map(),FLD_PX=.6;   // field art is drawn finer than the batter
 function spr(team,skin,frame,flip,glove,k=1){
-  const key=team.abbr+team.jersey+team.cap+team.pants+skin+frame+(flip?1:0)+(glove?1:0)+k; let c=sprCache.get(key); if(c) return c;
-  const LW=26*k,LH=22*k,ax=13*k,ay=20.5*k;
-  c=document.createElement('canvas'); c.width=Math.ceil(LW*RS); c.height=Math.ceil(LH*RS);
-  const g=c.getContext('2d',{willReadFrequently:true}); g.setTransform(RS,0,0,RS,0,0);
-  const P=FP[frame];
-  drawSkel(g,ax,ay,3.3*k,flip?-1:1,P,team,{skin,glove:glove?'F':null,o:.5});
-  const img=g.getImageData(0,0,c.width,c.height),d=img.data; for(let i=3;i<d.length;i+=4) d[i]=d[i]>=110?255:0; g.putImageData(img,0,0);
-  c.lw=LW; c.lh=LH; c.ax=ax; c.ay=ay; sprCache.set(key,c); return c;
+  const f={runC:'runA',runD:'runB',hrC:'hrA',hrD:'hrB'}[frame]||frame,key='F'+f+team.abbr+team.jersey+team.cap+skin+(flip?1:0)+(glove?1:0)+k; let c=sprCache.get(key);
+  if(c) return c;
+  const a=artSprite('fld',f,team,skin,flip,!glove);
+  k*=FLD_PX; c={img:a,lw:a.width*k,lh:a.height*k,ax:(a.width/2)*k,ay:(a.height-1)*k}; sprCache.set(key,c); return c;
 }
-function drawSpr(c,x,y){ ctx.drawImage(c,snap(x-c.ax),snap(y-c.ay),c.lw,c.lh); }
-
-/* batter (side view, facing the plate) */
-const BP={
-  stance:{pel:[-.05,2.8],neck:[.08,4.55],head:[.15,5.12],sN:[-.3,4.38],eN:[-.82,4.15],hN:[-.45,4.75],sF:[.32,4.42],eF:[.42,3.9],hF:[-.33,4.62],
-    hipN:[-.2,2.78],kN:[-.75,1.55],aN:[-1.0,.25],hipF:[.1,2.78],kF:[.8,1.5],aF:[.98,.25]},
-  contact:{pel:[.05,2.72],neck:[.12,4.5],head:[.2,5.08],sN:[-.12,4.33],eN:[.22,3.55],hN:[.88,3.8],sF:[.42,4.38],eF:[.68,4.06],hF:[1.0,3.75],
-    hipN:[-.08,2.7],kN:[-.4,1.35],aN:[-.95,.35],hipF:[.2,2.72],kF:[.9,1.5],aF:[1.05,.25]},
-  follow:{pel:[.08,2.75],neck:[.15,4.5],head:[.22,5.08],sN:[-.02,4.35],eN:[.58,4.12],hN:[.5,4.75],sF:[.45,4.4],eF:[.85,4.45],hF:[.42,4.88],
-    hipN:[-.02,2.72],kN:[-.25,1.45],aN:[-.8,.45],hipF:[.22,2.75],kF:[.88,1.52],aF:[1.05,.25]},
-  bunt:{pel:[0,2.7],neck:[.15,4.45],head:[.25,5.0],sN:[-.12,4.3],eN:[.3,3.7],hN:[.55,3.9],sF:[.42,4.35],eF:[.7,3.85],hF:[1.0,3.95],
-    hipN:[-.15,2.7],kN:[-.55,1.45],aN:[-.85,.25],hipF:[.15,2.7],kF:[.75,1.45],aF:[.9,.25]},
-};
-const batAngle=ph=>(ph<.45?115-120*(ph/.45):-5-190*((ph-.45)/.55))*Math.PI/180;
-function batPose(ph){ return ph<.45?lerpPose(BP.stance,BP.contact,ph/.45):lerpPose(BP.contact,BP.follow,(ph-.45)/.55); }
-// draw into a low-res buffer, snap alpha to on/off, then blow it up with hard pixel edges
-const PXC=document.createElement('canvas'),PXG=PXC.getContext('2d',{willReadFrequently:true});
-function pixelBlit(x,y,w,h,px,draw){
-  const x0=Math.floor(x/px)*px,y0=Math.floor(y/px)*px,cw=Math.ceil(w/px)+1,ch=Math.ceil(h/px)+1;
-  if(PXC.width<cw||PXC.height<ch){ PXC.width=Math.max(PXC.width,cw); PXC.height=Math.max(PXC.height,ch); }
-  PXG.setTransform(1,0,0,1,0,0); PXG.clearRect(0,0,cw,ch);
-  PXG.setTransform(1/px,0,0,1/px,-x0/px,-y0/px); draw(PXG);
-  const img=PXG.getImageData(0,0,cw,ch),d=img.data; for(let i=3;i<d.length;i+=4) d[i]=d[i]>=110?255:0;
-  PXG.putImageData(img,0,0); ctx.drawImage(PXC,0,0,cw,ch,x0,y0,cw*px,ch*px);
-}
-// bat swings in 3D (yaw around the body, elevation), projected onto the screen
-const BATK=[[0,180,65],[.25,100,25],[.45,0,-5],[.65,-90,15],[1,-200,50]];
-function batDir(ph,bunt){
-  if(bunt) return {dx:.99,dy:.14,yaw:0};
-  let i=0; while(i<BATK.length-2&&ph>BATK[i+1][0]) i++;
-  const a=BATK[i],b=BATK[i+1],t=clamp((ph-a[0])/(b[0]-a[0]),0,1),yaw=a[1]+(b[1]-a[1])*t,el=(a[2]+(b[2]-a[2])*t)*Math.PI/180;
-  return {dx:Math.cos(el)*Math.cos(yaw*Math.PI/180),dy:Math.sin(el),yaw};
-}
-function batterPose(phase,bunt){
-  const P0=bunt?BP.bunt:batPose(phase),bd=batDir(phase,bunt),grip=lerp2(P0.hN,P0.hF,.5),sp=bunt?.9:.3;
-  return {P:{...P0,hF:grip,hN:[grip[0]+bd.dx*sp,grip[1]+bd.dy*sp]},grip,bd};
-}
-/* pitcher (front view, facing the plate) */
-const PPOSE={
-  set:{front:true,pel:[0,2.8],neck:[0,4.6],head:[0,5.18],sN:[-.55,4.4],eN:[-.62,3.6],hN:[-.05,3.55],sF:[.55,4.4],eF:[.62,3.6],hF:[.1,3.58],
-    hipN:[-.3,2.75],kN:[-.33,1.45],aN:[-.38,.25],hipF:[.3,2.75],kF:[.33,1.45],aF:[.38,.25]},
-  kick:{front:true,pel:[-.05,2.85],neck:[-.08,4.65],head:[-.08,5.23],sN:[-.6,4.45],eN:[-.66,3.9],hN:[-.06,4.2],sF:[.5,4.45],eF:[.58,3.9],hF:[.08,4.22],
-    hipN:[-.3,2.8],kN:[-.33,1.5],aN:[-.38,.25],hipF:[.25,2.8],kF:[.8,2.75],aF:[.55,1.75]},
-  cock:{front:true,pel:[.05,2.6],neck:[0,4.4],head:[-.02,4.98],sN:[-.6,4.25],eN:[-1.2,4.3],hN:[-1.25,5.05],sF:[.55,4.3],eF:[.78,3.9],hF:[.35,3.95],
-    hipN:[-.25,2.6],kN:[-.5,1.35],aN:[-.45,.25],hipF:[.3,2.6],kF:[.75,1.45],aF:[.85,.25]},
-  follow:{front:true,pel:[.1,2.5],neck:[.25,4.0],head:[.3,4.55],sN:[-.25,3.95],eN:[-.02,3.25],hN:[.55,2.75],sF:[.7,4.0],eF:[.88,3.35],hF:[.45,3.55],
-    hipN:[-.2,2.5],kN:[-.6,1.55],aN:[-.75,.85],hipF:[.35,2.5],kF:[.6,1.35],aF:[.75,.25]},
-};
-// arm comes over the top in front of the cap at release
-PPOSE.release={...lerpPose(PPOSE.cock,PPOSE.follow,.35),eN:[-.75,4.75],hN:[-.25,5.3]};
-/* ---------- 8-bit batting-screen sprites ----------
-   Built like NES sprites: a tiny pixel grid, a few flat colors, a hard 1-px black outline,
-   and a handful of key poses that snap from one to the next. */
+function drawSpr(c,x,y){ ctx.drawImage(c.img||c,snap(x-c.ax),snap(y-c.ay),c.lw,c.lh); }
 const ART_INK='#0d0b10';
-function discPx(cx,cy,r,fn){ if(r<.6){ fn(Math.round(cx),Math.round(cy)); return; }
-  for(let y=Math.floor(cy-r);y<=Math.ceil(cy+r);y++) for(let x=Math.floor(cx-r);x<=Math.ceil(cx+r);x++) if((x-cx)*(x-cx)+(y-cy)*(y-cy)<=r*r+.15) fn(x,y); }
-function inPoly(x,y,P){ let c=false; for(let i=0,j=P.length-1;i<P.length;j=i++){ const [xi,yi]=P[i],[xj,yj]=P[j]; if(((yi>y)!==(yj>y))&&(x<(xj-xi)*(y-yi)/(yj-yi)+xi)) c=!c; } return c; }
-const shadeMemo=new Map(),shadeC=(c,f)=>{ const key=c+f; let v=shadeMemo.get(key); if(!v){ v=shade(c,f); shadeMemo.set(key,v); } return v; };
-function pixelSprite(w,h,parts,flip,lit){
-  const id=new Int16Array(w*h).fill(-1),col=new Array(w*h);
-  const put=(x,y,c,i,maxY)=>{ x=Math.round(x); y=Math.round(y); if(x<0||y<0||x>=w||y>=h||(maxY!==undefined&&y>maxY)) return; id[y*w+x]=i; col[y*w+x]=c; };
-  parts.forEach((p,i)=>{
-    if(p.k==='rect'){ for(let y=p.y;y<p.y+p.h;y++) for(let x=p.x;x<p.x+p.w;x++) put(x,y,p.c,i); }
-    else if(p.k==='disc') discPx(p.x,p.y,p.r,(x,y)=>put(x,y,p.c,i,p.maxY));
-    else if(p.k==='line'){ const [a,b]=p.p,n=Math.ceil(hyp(b[0]-a[0],b[1]-a[1])*3)+1;
-      for(let s=0;s<=n;s++){ const t=s/n; discPx(a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,p.r0+(p.r1-p.r0)*t,(x,y)=>put(x,y,p.c,i)); } }
-    else if(p.k==='poly'){ const xs=p.p.map(q=>q[0]),ys=p.p.map(q=>q[1]);
-      for(let y=Math.floor(Math.min(...ys));y<=Math.ceil(Math.max(...ys));y++) for(let x=Math.floor(Math.min(...xs));x<=Math.ceil(Math.max(...xs));x++)
-        if(inPoly(x+.5,y+.5,p.p)) put(x,y,(p.shadeX!==undefined&&x<p.shadeX)?p.c2:p.c,i); }
-    else if(p.k==='px') for(const [x,y,c] of p.pts) put(x,y,c||p.c,i);
-  });
-  const out=col.slice(),N=[[1,0],[-1,0],[0,1],[0,-1]];
-  // rim lighting (hi-res sprites): light from the upper left, so each colour area gets a bright top-left edge and a dark bottom-right one
-  if(lit) for(let y=0;y<h;y++) for(let x=0;x<w;x++){ const i=id[y*w+x]; if(i<0||parts[i].flat) continue; const c=col[y*w+x]; if(c===ART_INK) continue;
-    // small painted details (eyes, piping, logos) don't count as edges of the shape underneath
-    const edge=(xx,yy)=>{ if(xx<0||yy<0||xx>=w||yy>=h) return true; const j=id[yy*w+xx]; return j<0||(col[yy*w+xx]!==c&&!parts[j].flat); };
-    const hi=edge(x-1,y)||edge(x,y-1),lo=edge(x+1,y)||edge(x,y+1);
-    if(lo&&!hi) out[y*w+x]=shadeC(c,.78); else if(hi&&!lo) out[y*w+x]=shadeC(c,1.18); }
-  // parts flagged "sep" get a dark line where they cross over earlier parts (arm over chest, etc.)
-  for(let y=0;y<h;y++) for(let x=0;x<w;x++){ const i=id[y*w+x]; if(i<0||!parts[i].sep) continue;
-    for(const [dx,dy] of N){ const nx=x+dx,ny=y+dy; if(nx<0||ny<0||nx>=w||ny>=h) continue; const j=id[ny*w+nx]; if(j>=0&&j<i&&!parts[j].noSep) out[ny*w+nx]=ART_INK; } }
-  // hard silhouette outline
-  for(let y=0;y<h;y++) for(let x=0;x<w;x++){ if(id[y*w+x]>=0) continue;
-    for(const [dx,dy] of N){ const nx=x+dx,ny=y+dy; if(nx>=0&&ny>=0&&nx<w&&ny<h&&id[ny*w+nx]>=0){ out[y*w+x]=ART_INK; break; } } }
-  const c=document.createElement('canvas'); c.width=w; c.height=h; const g=c.getContext('2d');
-  for(let y=0;y<h;y++) for(let x=0;x<w;x++){ const v=out[y*w+x]; if(!v) continue; g.fillStyle=v; g.fillRect(flip?w-1-x:x,y,1,1); }
+function batterSprite(t,skin,frame,flip,num){
+  const f=frame==='extend'?'follow':frame,key='N'+f+t.abbr+t.jersey+t.cap+t.pants+skin+(flip?1:0)+num; let c=artCache.get(key);
+  if(!c){ c=artCanvas(ART.bat[f],artKit(t,skin),flip); artCache.set(key,c); }
   return c;
 }
-function kit8(t,skin){ return {cap:t.cap,capD:shade(t.cap,.62),cap2:shade(t.cap,1.35),jer:t.jersey,jerD:shade(t.jersey,.68),pan:t.pants,panD:shade(t.pants,.76),
-  skin,skinD:shade(skin,.78),shoe:'#26212c',bat:'#dba45c',batD:'#93602f',batH:'#f3cf8e',glv:'#f2ece0',mitt:'#7b4a22',mittD:'#4f2c12',lace:'#c8a070'}; }
-// u scales the NES-size art grid (2 = the hi-res batting-screen sprites, which also get piping, stirrups and shoe stripes)
-const qU=(p,u)=>[p[0]*u,p[1]*u];
-function leg8(P,hip,knee,ank,k,far,toeDir=1,bk=1,u=1){
-  const q=p=>qU(p,u),pc=far?k.panD:k.pan,sc=far?k.capD:k.cap,mid=lerp2(knee,ank,.45),toe=[ank[0]+2.6*toeDir,ank[1]+.6];
-  P.push({k:'line',p:[q(hip),q(knee)],r0:1.5*bk*u,r1:1.15*bk*u,c:pc},{k:'line',p:[q(knee),q(mid)],r0:1.1*bk*u,r1:1*bk*u,c:pc},
-         {k:'line',p:[q(mid),q(ank)],r0:.95*bk*u,r1:.85*bk*u,c:sc},{k:'line',p:[q(ank),q(toe)],r0:.95*bk*u,r1:.8*bk*u,c:k.shoe});
-  if(u>1) P.push({k:'line',p:[q(lerp2(hip,knee,.15)),q(lerp2(knee,mid,.7))],r0:.4,r1:.4,c:far?k.capD:k.cap,flat:1},
-    {k:'line',p:[q(lerp2(mid,ank,.62)),q(lerp2(mid,ank,.8))],r0:.88*bk*u,r1:.84*bk*u,c:far?'#bdb6aa':'#ece6da'},
-    {k:'line',p:[q(lerp2(ank,toe,.2)),q(lerp2(ank,toe,.8))],r0:.45,r1:.45,c:'#e8e2d4',flat:1});
+// the art row the contact frame's bat sits on, so the swing meets the pitch
+const BAT_ROW=(r=>r.reduce((a,v)=>a+v,0)/r.length+.5)(ART.bat.contact.map((r,i)=>/[Tt]{8}/.test(r)?i:-1).filter(i=>i>=0));
+function pitcherSprite(t,skin,frame){ return artSprite('pit',frame,t,skin,false); }
+function drawCatcher(t,skin){
+  const c=artSprite('catcher','',t,skin,false);
+  const k=.8; ctx.drawImage(c,snap(128-59*k),snap(218-c.height*k),c.width*k,c.height*k);   // shoulders up, right in front of the camera; the cut edge hides under the batter card
 }
-function arm8(P,sh,el,hd,k,far,sep,bk=1,u=1){
-  const q=p=>qU(p,u);
-  P.push({k:'line',p:[q(sh),q(el)],r0:1.15*bk*u,r1:.95*bk*u,c:far?k.jerD:k.jer,sep},{k:'line',p:[q(el),q(hd)],r0:.85*bk*u,r1:.75*bk*u,c:far?k.skinD:k.skin,sep});
-  if(u>1) P.push({k:'line',p:[q(lerp2(sh,el,.68)),q(lerp2(sh,el,.78))],r0:1.02*bk*u,r1:.98*bk*u,c:far?k.capD:k.cap,sep});   // sleeve trim
-}
-// batter key poses, art pixels (canvas 44x42, ground at y=39), right-handed, facing the plate (to the right)
-const BAT8={
-  stance:{head:[15,9],neck:[14,13],torso:[[12,13],[18,13],[17,23],[12,23]],sB:[13,15],eB:[8,17],sF:[17,15],eF:[16,20],grip:[10,10],tip:[6,0],
-    hipB:[13,24],kB:[10,31],aB:[9,37],hipF:[16,24],kF:[20,31],aF:[22,37]},
-  load:{head:[14,9],neck:[13,13],torso:[[11,13],[17,13],[16,23],[11,23]],sB:[12,15],eB:[7,16],sF:[16,15],eF:[14,20],grip:[8,11],tip:[3,2],
-    hipB:[12,24],kB:[9,31],aB:[9,37],hipF:[15,24],kF:[19,29],aF:[21,35]},
-  contact:{head:[17,9],neck:[16,13],torso:[[14,13],[20,13],[19,23],[14,23]],sB:[15,15],eB:[19,20],sF:[19,15],eF:[23,17],grip:[26,19],tip:[41,18],
-    hipB:[15,24],kB:[16,31],aB:[12,36],hipF:[18,24],kF:[22,31],aF:[23,37]},
-  extend:{head:[17,9],neck:[16,13],torso:[[14,13],[20,13],[19,23],[14,23]],sB:[16,15],eB:[21,16],sF:[19,15],eF:[23,14],grip:[25,12],tip:[31,4],
-    hipB:[15,24],kB:[17,31],aB:[13,36],hipF:[18,24],kF:[22,31],aF:[23,37]},
-  follow:{head:[17,9],neck:[16,13],torso:[[14,13],[20,13],[19,23],[14,23]],sB:[16,15],eB:[22,13],sF:[19,15],eF:[23,10],grip:[18,7],tip:[5,3],behind:1,
-    hipB:[15,24],kB:[17,31],aB:[14,36],hipF:[18,24],kF:[22,31],aF:[23,37]},
-  bunt:{head:[17,9],neck:[16,13],torso:[[13,13],[19,13],[18,23],[13,23]],sB:[14,15],eB:[19,18],sF:[18,15],eF:[21,19],grip:[22,19],hB:[28,18],tip:[34,17],butt:[19,19],
-    hipB:[14,24],kB:[13,31],aB:[12,37],hipF:[17,24],kF:[20,31],aF:[21,37]},
-};
-function batterParts(J,k,u=1){
-  const P=[],q=p=>qU(p,u),R=Math.round,hB=J.hB||[J.grip[0]+.8,J.grip[1]-.8],blk=(x,y,c)=>({k:'rect',x:R(x*u),y:R(y*u),w:u,h:u,c});
-  const bat=()=>{ const b0=J.butt||J.grip; P.push({k:'line',p:[q(b0),q(J.tip)],r0:.55*u,r1:1.05*u,c:k.bat,noSep:1},{k:'line',p:[q(b0),q(lerp2(b0,J.tip,.3))],r0:.5*u,r1:.55*u,c:k.batD,noSep:1});
-    if(u>1){ const kn=lerp2(b0,J.tip,-.035); P.push({k:'disc',x:kn[0]*u,y:kn[1]*u,r:.75*u,c:k.batD,noSep:1},{k:'line',p:[q(lerp2(b0,J.tip,.4)),q(lerp2(b0,J.tip,.93))],r0:.3,r1:.45,c:k.batH,noSep:1,flat:1}); } };
-  if(J.behind) bat();
-  const tcx=(J.torso[0][0]+J.torso[1][0]+J.torso[2][0]+J.torso[3][0])/4,TO=J.torso.map(([x,y],i)=>[tcx+(x-tcx)*1.35,y+(i<2?-.5:0)]);
-  leg8(P,J.hipB,J.kB,J.aB,k,true,1,1.3,u); leg8(P,J.hipF,J.kF,J.aF,k,false,1,1.3,u);
-  P.push({k:'poly',p:TO.map(q),c:k.jer,c2:k.jerD,shadeX:(TO[0][0]+2.5)*u});
-  if(u>1){ // button placket down the front of the jersey, a belt with a buckle, a chest logo
-    P.push({k:'line',p:[q(lerp2(TO[1],TO[2],.08)),q(lerp2(TO[1],TO[2],.92))],r0:.45,r1:.45,c:k.cap,flat:1});
-    P.push({k:'rect',x:R(TO[3][0]*u),y:R(TO[3][1]*u)-u,w:R((TO[2][0]-TO[3][0])*u)+1,h:u,c:'#1d1922',flat:1},{k:'rect',x:R(TO[2][0]*u)-3,y:R(TO[3][1]*u)-u,w:2,h:u,c:'#c9b67a',flat:1});
-    const lx=J.torso[1][0]-3,ly=J.torso[1][1]+3.6; P.push({k:'rect',x:R(lx*u),y:R(ly*u),w:2*u+1,h:u+1,c:k.cap2,flat:1});
-  } else {
-    P.push({k:'rect',x:R(TO[3][0]),y:R(TO[3][1])-1,w:R(TO[2][0]-TO[3][0])+1,h:1,c:ART_INK});
-    P.push({k:'px',pts:[[R(J.torso[1][0])-2,R(J.torso[1][1])+4,k.pan],[R(J.torso[1][0])-3,R(J.torso[1][1])+4,k.pan]]}); }
-  P.push({k:'line',p:[q(J.neck),q(J.head)],r0:u,r1:u,c:k.skinD},{k:'disc',x:J.head[0]*u,y:J.head[1]*u,r:3*u,c:k.skin});
-  // batting helmet: dome, brim, ear flap, shine; eye
-  P.push({k:'disc',x:(J.head[0]-.6)*u,y:(J.head[1]-.7)*u,r:3.5*u,c:k.cap,maxY:R(J.head[1]*u)+(u>1?1:0)},
-         {k:'rect',x:R(J.head[0]*u)+u,y:R(J.head[1]*u)-u,w:4*u,h:u,c:k.capD},
-         {k:'disc',x:(J.head[0]-2)*u,y:(J.head[1]+.6)*u,r:1.3*u,c:k.cap});
-  if(u>1) P.push({k:'rect',x:R((J.head[0]-1.6)*u),y:R((J.head[1]-3.4)*u),w:3,h:1,c:'#ffffff',flat:1},{k:'rect',x:R((J.head[0]-2.2)*u),y:R((J.head[1]-2.8)*u),w:1,h:2,c:k.cap2,flat:1},
-    {k:'rect',x:R((J.head[0]+1.7)*u),y:R((J.head[1]+.8)*u),w:1,h:2,c:ART_INK,flat:1},{k:'rect',x:R((J.head[0]+2.6)*u),y:R((J.head[1]+1.6)*u),w:1,h:1,c:k.skinD,flat:1},
-    {k:'rect',x:R((J.head[0]+1.4)*u),y:R((J.head[1]+2.4)*u),w:2,h:1,c:k.skinD,flat:1});
-  else P.push({k:'px',pts:[[R(J.head[0])-1,R(J.head[1])-3,k.cap2],[R(J.head[0]),R(J.head[1])-3,k.cap2],[R(J.head[0])+2,R(J.head[1])+1,ART_INK]]});
-  arm8(P,J.sF,J.eF,J.grip,k,false,1,1.3,u);
-  if(!J.behind) bat();
-  P.push({k:'disc',x:J.grip[0]*u,y:J.grip[1]*u,r:1.3*u,c:k.glv,sep:1},{k:'disc',x:hB[0]*u,y:hB[1]*u,r:1.3*u,c:k.glv,sep:1});
-  arm8(P,J.sB,J.eB,hB,k,false,1,1.3,u);
-  return P;
-}
-// pitcher key poses, front view (canvas 26x30, ground at y=28); throwing arm is screen-left
-const PIT8={
-  set:{head:[13,5],torso:[[10,9],[16,9],[15,17],[11,17]],sL:[10,10],eL:[9,14],hL:[12,14],sR:[16,10],eR:[17,14],hR:[14,14],
-    hipL:[11,18],kL:[11,23],aL:[11,27],hipR:[15,18],kR:[15,23],aR:[15,27]},
-  kick:{head:[12,5],torso:[[9,9],[15,9],[14,17],[10,17]],sL:[9,10],eL:[7,13],hL:[11,11],sR:[15,10],eR:[16,13],hR:[13,11],
-    hipL:[10,18],kL:[10,23],aL:[10,27],hipR:[14,18],kR:[18,16],aR:[17,21]},
-  cock:{head:[13,6],torso:[[10,10],[16,10],[15,18],[11,18]],sL:[10,11],eL:[6,11],hL:[6,6],sR:[16,11],eR:[18,13],hR:[16,14],
-    hipL:[11,19],kL:[9,23],aL:[9,27],hipR:[15,19],kR:[18,22],aR:[20,27]},
-  release:{head:[14,7],torso:[[11,11],[17,11],[16,19],[12,19]],sL:[11,12],eL:[9,8],hL:[12,4],sR:[17,12],eR:[18,15],hR:[16,16],
-    hipL:[12,20],kL:[10,23],aL:[8,26],hipR:[16,20],kR:[18,23],aR:[19,27]},
-  follow:{head:[15,9],torso:[[12,12],[18,12],[17,20],[13,20]],sL:[12,13],eL:[14,17],hL:[18,20],sR:[18,13],eR:[19,16],hR:[17,15],
-    hipL:[13,21],kL:[9,22],aL:[6,23],hipR:[17,21],kR:[18,24],aR:[19,27]},
-};
-function pitcherParts(J,k,ball,u=1){
-  const P=[],q=p=>qU(p,u),R=Math.round;
-  leg8(P,J.hipL,J.kL,J.aL,k,false,-.4,1.1,u); leg8(P,J.hipR,J.kR,J.aR,k,false,.4,1.1,u);
-  P.push({k:'poly',p:J.torso.map(q),c:k.jer,c2:k.jerD,shadeX:(J.torso[0][0]+1)*u});
-  const cx=(J.torso[0][0]+J.torso[1][0])/2,cy=J.torso[0][1]+3;
-  if(u>1){ P.push({k:'rect',x:R(J.torso[3][0]*u),y:R(J.torso[3][1]*u)-u,w:R((J.torso[2][0]-J.torso[3][0])*u)+1,h:u,c:'#1d1922',flat:1},{k:'rect',x:R(cx*u)-1,y:R(J.torso[3][1]*u)-u,w:2,h:u,c:'#c9b67a',flat:1});
-    P.push({k:'rect',x:R((cx-2)*u),y:R(cy*u)-1,w:4*u,h:u,c:k.pan,flat:1},{k:'rect',x:R((cx-2)*u)+1,y:R(cy*u)-1+u,w:4*u-2,h:1,c:k.cap,flat:1},
-      {k:'line',p:[q([cx-1,J.torso[0][1]+.2]),q([cx,J.torso[0][1]+1.2])],r0:.45,r1:.45,c:k.cap,flat:1},{k:'line',p:[q([cx+1,J.torso[0][1]+.2]),q([cx,J.torso[0][1]+1.2])],r0:.45,r1:.45,c:k.cap,flat:1}); }
-  else { P.push({k:'rect',x:R(J.torso[3][0]),y:R(J.torso[3][1])-1,w:R(J.torso[2][0]-J.torso[3][0])+1,h:1,c:ART_INK});
-    P.push({k:'px',pts:[[R(cx)-2,R(cy),k.pan],[R(cx)-1,R(cy),k.pan],[R(cx),R(cy),k.pan],[R(cx)+1,R(cy),k.pan]]}); }
-  if(u>1){ // hi-res head: neck, ears, a rounder face, small eyes, nose, mouth; cap with a front brim and a logo
-    const hx=J.head[0]*u,hy=J.head[1]*u+1,X=R(hx),Y=R(hy),ty=J.torso[0][1]*u;
-    P.push({k:'line',p:[[hx,hy+3],[hx,ty+.5]],r0:1.7,r1:2.1,c:k.skinD},
-      {k:'disc',x:hx-4.4,y:hy+.6,r:1.1,c:k.skinD},{k:'disc',x:hx+4.4,y:hy+.6,r:1.1,c:k.skinD},
-      {k:'disc',x:hx,y:hy,r:4.6,c:k.skin,sep:1},
-      {k:'disc',x:hx,y:hy-1.6,r:4.6,c:k.cap,maxY:Y-2},
-      {k:'rect',x:X-5,y:Y-2,w:11,h:2,c:k.capD},
-      {k:'rect',x:X-1,y:Y-6,w:2,h:2,c:k.cap2,flat:1},
-      {k:'rect',x:X-2,y:Y+1,w:1,h:1,c:ART_INK,flat:1},{k:'rect',x:X+2,y:Y+1,w:1,h:1,c:ART_INK,flat:1},
-      {k:'rect',x:X,y:Y+2,w:1,h:1,c:k.skinD,flat:1},{k:'rect',x:X-1,y:Y+3,w:3,h:1,c:shade(k.skin,.62),flat:1}); }
-  else { P.push({k:'disc',x:J.head[0],y:J.head[1],r:2.1,c:k.skin},{k:'disc',x:J.head[0],y:J.head[1]-.6,r:2.2,c:k.cap,maxY:R(J.head[1])-1},
-         {k:'rect',x:R(J.head[0])-2,y:R(J.head[1])-1,w:5,h:1,c:k.capD}); }
-  if(u===1) P.push({k:'px',pts:[[R(J.head[0])-1,R(J.head[1])+.4|0,ART_INK],[R(J.head[0])+1,R(J.head[1])+.4|0,ART_INK]]});
-  arm8(P,J.sR,J.eR,J.hR,k,false,1,1,u); P.push({k:'disc',x:J.hR[0]*u,y:J.hR[1]*u,r:1.5*u,c:k.mitt,sep:1});
-  if(u>1) P.push({k:'line',p:[[(J.hR[0]-1)*u,(J.hR[1]-.4)*u],[(J.hR[0]+1)*u,(J.hR[1]-.4)*u]],r0:.4,r1:.4,c:k.lace,flat:1},{k:'disc',x:(J.hR[0]+.4)*u,y:(J.hR[1]+.5)*u,r:.6*u,c:k.mittD,flat:1});
-  arm8(P,J.sL,J.eL,J.hL,k,false,1,1,u);
-  if(ball) P.push({k:'disc',x:J.hL[0]*u,y:J.hL[1]*u,r:.9*u,c:'#ffffff',sep:1});
-  return P;
-}
-const spr8Cache=new Map();
-function batterSprite(t,skin,frame,flip){
-  const key='B'+t.abbr+t.jersey+t.cap+t.pants+skin+frame+(flip?1:0); let c=spr8Cache.get(key);
-  if(!c){ c=pixelSprite(44*SPR_U,42*SPR_U,batterParts(BAT8[frame],kit8(t,skin),SPR_U),flip,SPR_U>1); spr8Cache.set(key,c); }
-  return c;
-}
-function pitcherSprite(t,skin,frame,ball){
-  const key='P'+t.abbr+t.jersey+t.cap+t.pants+skin+frame+(ball?1:0); let c=spr8Cache.get(key);
-  if(!c){ c=pixelSprite(26*SPR_U,30*SPR_U,pitcherParts(PIT8[frame],kit8(t,skin),ball,SPR_U),false,SPR_U>1); spr8Cache.set(key,c); }
-  return c;
-}
-const BAT_PX=3,PIT_PX=1.5;   // game pixels per NES-grid pixel; the sprites are drawn SPR_U times finer than that
-const SPR_U=2;
+const PIT_PX=.73;   // game pixels per pitcher art pixel
 function batFrame(phase,bunt){ return bunt?'bunt':phase<=0?'stance':phase<.22?'load':phase<.5?'contact':phase<.72?'extend':'follow'; }
-function drawBatter(t,skin,hb,off,phase,bunt){
-  const [sx,sy]=pp(-hb*2.9+off,.3),c=batterSprite(t,skin,batFrame(phase,bunt),hb<0);
-  const ax=hb<0?44-15.5:15.5;   // feet centre in the sprite
-  ctx.imageSmoothingEnabled=false; ctx.drawImage(c,snap(sx-ax*BAT_PX),snap(sy-39*BAT_PX),44*BAT_PX,42*BAT_PX);
+let batHead=[0,0];
+// the batter art at BATK2 game px per art pixel; his feet sit where the contact frame's bat row meets the pitch (2.6 ft)
+const BATK2=1.55,BAT_FEET=18;
+// how far (art px) from his feet to the bat's sweet spot at contact: that spot sits over the plate, which puts him in the box
+const BAT_REACH=(()=>{ let a=0,b=0; ART.bat.contact.forEach(r=>{ const m=r.match(/[Tt]{8,}/); if(m&&m[0].length>b-a){ a=m.index; b=a+m[0].length; } }); return a+(b-a)*.7-BAT_FEET; })();
+function drawBatter(t,skin,hb,off,phase,bunt,num){
+  const c=batterSprite(t,skin,batFrame(phase,bunt),hb<0,num),k=BATK2,sx=128-hb*BAT_REACH*k+off*19.8,sy=pp(0,0,2.6)[1]+(ART.bat.contact.length-BAT_ROW)*k;
+  const fx=hb<0?c.aw-1-BAT_FEET:BAT_FEET;
+  ctx.imageSmoothingEnabled=false; ctx.drawImage(c,snap(sx-(fx+1)*k),snap(sy-(c.ah+1)*k),c.width*k,c.height*k);
+  batHead=[sx+(hb<0?-1:1)*2*k,sy-44*k];
 }
-function drawPitcher(sx,sy,s,t,skin,frame,ball){
-  const c=pitcherSprite(t,skin,frame,ball);
-  ctx.drawImage(c,snap(sx-13*PIT_PX),snap(sy-28*PIT_PX),26*PIT_PX,30*PIT_PX);
+function drawPitcher(sx,sy,s,t,skin,frame){
+  const c=pitcherSprite(t,skin,frame),k=PIT_PX;
+  ctx.drawImage(c,snap(sx-(c.aw/2+1)*k),snap(sy-(c.ah+1)*k),c.width*k,c.height*k);
 }
 
 
@@ -1756,10 +1506,10 @@ function updateField(dt){
     if(F.tr.wall>=0&&j>=F.tr.wall&&!F.wallHit){ F.wallHit=1; puff(p.x,p.y,10,'#ffffff'); F.pops.push({x:p.x,y:p.y,t:-.15,s:'OFF THE WALL'}); SFX.pop(); }
     if(man&&F.air&&!F.caught&&F.tr.fc>=0&&j>=F.tr.fc){ F.air=false; for(const r of live()) if(!r.isB&&r.pos===r.target) decideAdvance(r); }   // dropped it: runners go
     if(man&&F.manualOn&&F.catcher>=0){ const c=F.fl[F.catcher],air=F.tr.fc<0||j<F.tr.fc;
-      if(p.z<8.5&&hyp(c.x-p.x,c.y-p.y)<5&&F.t>.3){ F.ball={st:'held',f:F.catcher}; F.cool=.25; F.air=air; if(air) onCatch(); else SFX.pop(); }
+      if(p.z<8.5&&hyp(c.x-p.x,c.y-p.y)<5&&F.t>.3){ if(air&&c.mv&&hyp(c.x-p.x,c.y-p.y)>2.5) c.diveT=F.t; F.ball={st:'held',f:F.catcher}; F.cool=.25; F.air=air; if(air) onCatch(); else SFX.pop(); }
       else if(j>=F.tr.pts.length-1) F.ball={st:'loose',recv:F.catcher,x:p.x,y:p.y,z:0}; }
     else if(F.catcher>=0&&F.t>=F.catchT){ const c=F.fl[F.catcher];
-      if(hyp(c.x-F.catchPt.x,c.y-F.catchPt.y)<6){ F.ball={st:'held',f:F.catcher}; F.cool=.25; if(F.air) onCatch(); else SFX.pop(); } }
+      if(hyp(c.x-F.catchPt.x,c.y-F.catchPt.y)<6){ if(F.air&&c.mv&&hyp(c.x-F.catchPt.x,c.y-F.catchPt.y)>2) c.diveT=F.t; F.ball={st:'held',f:F.catcher}; F.cool=.25; if(F.air) onCatch(); else SFX.pop(); } }
   } else if(b.st==='held'){
     const f=F.fl[b.f]; b.x=f.x; b.y=f.y; b.z=4;
   } else if(b.st==='throw'){
@@ -1950,24 +1700,29 @@ function drawPitch(){
     ctx.globalAlpha=1; drawBallArt(bq[0],bq[1],Math.max(1,bq[2]*.13),P.t*30); };
   if(!front) drawBall();
   const bt=curBatter(),phase=P.swingT<0?0:Math.min(1,P.swingT/.2);
-  if(P.hbp){ const k=Math.min(1,P.t*4); drawBatter(off,skinOf(bt[0]),P.hb,P.off-P.hb*.6*k,0,false);
-    const hd=pp(-P.hb*2.9+P.off-P.hb*.6*k,.3,6.3);
-    for(let i=0;i<3;i++){ const a=P.t*6+i*2.1; drawStar(hd[0]+Math.cos(a)*12,hd[1]+Math.sin(a)*3); } }
-  else drawBatter(off,skinOf(bt[0]),P.hb,P.off,P.swing&&P.swing.bunt?.42:phase,!!(P.swing&&P.swing.bunt));
+  const num=jerseyNo(bt[0]);
+  if(P.hbp){ const k=Math.min(1,P.t*4); drawBatter(off,skinOf(bt[0]),P.hb,P.off-P.hb*.6*k,0,false,num);
+    for(let i=0;i<3;i++){ const a=P.t*6+i*2.1; drawStar(batHead[0]+Math.cos(a)*12,batHead[1]-8+Math.sin(a)*3); } }
+  else drawBatter(off,skinOf(bt[0]),P.hb,P.off,P.swing&&P.swing.bunt?.42:phase,!!(P.swing&&P.swing.bunt),num);
+  drawCatcher(def,skinOf(def.lineup[1][0]));
   if(front) drawBall();
   if(P.state==='contact'&&bq){ const a=P.t*9;
     ctx.save(); ctx.translate(bq[0],bq[1]); ctx.rotate(a*.3);
     for(let i=0;i<10;i++){ const r1=4+P.t*20,r2=12+P.t*70*(i%2?.6:1); ctx.strokeStyle=i%2?'#f4c84a':'#ffffff'; ctx.lineWidth=1.5;
       ctx.beginPath(); ctx.moveTo(Math.cos(i*.628)*r1,Math.sin(i*.628)*r1); ctx.lineTo(Math.cos(i*.628)*r2,Math.sin(i*.628)*r2); ctx.stroke(); }
     ctx.restore(); }
-  // batter card
-  const gr=ctx.createLinearGradient(0,224,0,240); gr.addColorStop(0,'#1a1622'); gr.addColorStop(1,'#09080d');
-  ctx.fillStyle=gr; ctx.fillRect(0,224,W,16); ctx.fillStyle='#4a4158'; ctx.fillRect(0,224,W,.5);
-  teamChip(off,4,227.5); txt(String(G.ab[G.half]%9+1),14,228,C.dim); txt(bt[0],24,228);
-  const hx=26+bt[0].length*8; ctx.fillStyle='#2e2838'; ctx.fillRect(hx,227,11,10); txt(bt[1],hx+2,228,C.yellow);
-  tiny('PWR',hx+15,230,C.dim); const pw=Math.round(bt[2]*5);
-  for(let i=0;i<5;i++){ ctx.fillStyle=i<pw?C.yellow:'#2e2838'; ctx.fillRect(hx+29+i*4,229,3,6); }
-  if(P.rel!==undefined) txt(P.type+' '+P.mph,252,228,C.dim,'right'); else txt(def.pitcher.name,252,228,C.dim,'right');
+  // runners on 1st and 3rd get R.B.I.-style windows in the lower corners
+  if(!G.derby){ if(G.bases[2]) drawBaseWin(3,3,186,def,off); if(G.bases[0]) drawBaseWin(1,201,186,def,off); }
+  // batter / pitcher cards, R.B.I. style: name on top, the card stats under it
+  const gr=ctx.createLinearGradient(0,216,0,240); gr.addColorStop(0,'#1a1622'); gr.addColorStop(1,'#09080d');
+  ctx.fillStyle=gr; ctx.fillRect(0,216,W,24); ctx.fillStyle='#4a4158'; ctx.fillRect(0,216,W,.5);
+  const cs=cardStats(bt),pc=def.pitcher;
+  teamChip(off,4,219.5); txt(String(G.ab[G.half]%9+1),14,220,C.dim); txt(bt[0],24,220);
+  const hx=26+bt[0].length*8; ctx.fillStyle='#2e2838'; ctx.fillRect(hx,219,11,10); txt(bt[1],hx+2,220,C.yellow);
+  tiny('AVG '+cs.avg+'   HR '+cs.hr,14,232,C.text); tiny('PWR',98,232,C.dim); const pw=Math.round(bt[2]*5);
+  for(let i=0;i<5;i++){ ctx.fillStyle=i<pw?C.yellow:'#2e2838'; ctx.fillRect(112+i*4,231,3,6); }
+  txt(pc.name,252,220,C.text,'right');
+  tiny(P.rel!==undefined?P.type+' '+P.mph+' MPH':'ERA '+pitchERA(pc),252,232,P.rel!==undefined?C.yellow:C.text,'right');
   if(P.state==='after'&&!P.hbp&&P.locX!==undefined){
     const a=pp(-.95,0,3.6),b=pp(.95,0,1.6),dot=pp(P.locX,0,2.6),inZ=Math.abs(P.locX)<=.95;
     ctx.strokeStyle='rgba(246,242,230,.7)'; ctx.lineWidth=1; ctx.setLineDash([2,2]); ctx.strokeRect(snap(a[0]),snap(a[1]),snap(b[0]-a[0]),snap(b[1]-a[1])); ctx.setLineDash([]);
@@ -1994,6 +1749,27 @@ function drawPitch(){
     if(big) bigText(P.msg,128,61,16,ball?'#c9ffcf':'#fff6d0',ball?'#3fae4c':'#f4b13a'); else bigText(P.msg,128,65,8,ball?'#c9ffcf':'#fff6d0',ball?'#3fae4c':'#f4b13a');
     ctx.globalAlpha=1; }
 }
+// card stats like the back of an R.B.I. cartridge roster: fixed numbers that follow from the ratings (same every game)
+function jerseyNo(name){ return 1+strHash(name+'#')%49; }
+function cardStats(b){ const r=rng(strHash(b[0]+'card')); return {avg:'.'+String(Math.round(205+b[3]*110+r()*25)).padStart(3,'0'),hr:Math.round(b[2]*b[2]*38+r()*6)}; }
+function pitchERA(p){ const r=rng(strHash(p.name+'era')); return (6.1-p.ctrl*2.4-p.velo*2.2+r()*.5).toFixed(2); }
+// a little overhead window on 1st or 3rd base: the baseman, the bag and the runner taking his lead (or running on a steal)
+function drawBaseWin(base,x,y,def,off){
+  const w=52,h=28,b=BASE[base],s=.5,cx=x+w/2,cy=y+h/2+3,S=(wx,wy)=>[cx+(wx-b[0])*s,cy-(wy-b[1])*s*.78];
+  ctx.save(); ctx.fillStyle=ART_INK; ctx.fillRect(x-1,y-1,w+2,h+2); ctx.beginPath(); ctx.rect(x,y,w,h); ctx.clip();
+  ctx.fillStyle='#4f9c46'; ctx.fillRect(x,y,w,h);
+  ctx.fillStyle='#cc9058'; ctx.beginPath(); ctx.ellipse(cx,cy,15*s*2,15*s*.78*2,0,0,7); ctx.fill();
+  const h0=S(0,0),hb=S(b[0]*2,b[1]*2); ctx.strokeStyle='#f6f2e6'; ctx.lineWidth=.8; ctx.beginPath(); ctx.moveTo(h0[0],h0[1]); ctx.lineTo(hb[0],hb[1]); ctx.stroke();
+  const p=S(b[0],b[1]); ctx.fillStyle='#ffffff'; ctx.fillRect(p[0]-1.5,p[1]-1,3,2);
+  // runner leads toward the next base; on a steal he's on his way
+  const nx=BASE[base+1],dx=nx[0]-b[0],dy=nx[1]-b[1],L=hyp(dx,dy); let lead=16,mv=false;
+  if(P.steal&&P.steal.who.includes(base)){ const t=stealRel()-P.steal.rel; if(t>0){ lead=Math.min(80,10+t*22); mv=true; } }
+  const ri=G.bases[base-1],rp=[b[0]+dx/L*lead,b[1]+dy/L*lead],fp=base===1?[b[0]+19,b[1]+13]:[b[0]-19,b[1]+13];
+  const ents=[{p:fp,c:spr(def,skinOf(def.lineup[(base===1?2:5)%9][0]),'stand',base===1,true,.8)},
+    {p:rp,c:spr(off,skinOf(ri[0]),mv?'run'+'ABCD'[(performance.now()/80|0)%4]:'stand',dx<0,false,.8)}];
+  ents.sort((a,b2)=>b2.p[1]-a.p[1]).forEach(e=>{ const q=S(e.p[0],e.p[1]); shadowEll(q[0],q[1],3,1); drawSpr(e.c,q[0],q[1]); });
+  ctx.restore(); tiny(base===1?'1ST':'3RD',x+2,y+h-6,'#ffffff');
+}
 function drawField(){
   const sx0=clamp(Math.round(CAM.x*RS),0,(WW-W)*RS),sy0=clamp(Math.round((CAM.y+22)*RS),0,(WH-218)*RS);
   ctx.drawImage(bgWorld,sx0,sy0,W*RS,218*RS,0,22,W,218);
@@ -2003,6 +1779,8 @@ function drawField(){
     if(f.mv){ const d=f.tx-f.x; if(Math.abs(d)>.5) f.face=d<0?-1:1; }
     let fr=f.mv?'run'+'ABCD'[(F.t*12+i|0)%4]:'stand';
     if(F.ball.st==='throw'&&F.ball.thr===i&&F.t-F.ball.t0<.22) fr='throw';
+    else if(f.diveT!=null&&F.t-f.diveT<.45) fr='dive';
+    else if(F.ball.st==='batted'&&F.catcher===i&&F.ball.z>2.5&&hyp(f.x-F.ball.x,f.y-F.ball.y)<14) fr='catch';   // glove up as it comes down
     ents.push({x:f.x,y:f.y,c:spr(def,skinOf(i===0?def.pitcher.name:def.lineup[i%9][0]),fr,f.face<0,true)}); });
   live().forEach(r=>{ if(r.phantom) return; const [x,y]=runnerXY(r),mv=r.pos!==r.target&&r.delay<=0,dir=Math.sign(r.target-r.pos)||1;
     const a=BASE[Math.min(3,Math.floor(r.pos))],b=BASE[Math.min(4,Math.floor(r.pos)+1)];
@@ -2146,10 +1924,10 @@ function menuRows(){
   const m=MENU.mode,AT=allTeams(),lk=seaLocked();
   const R={mode:['MODE',MODES[m]],lvl:['LEVEL',LVL[lk?SEA.lvl:MENU.lvl].name],you:['YOU',lk?(AT[seaIdx(SEA.teams[0])]||'?'):(AT[MENU.you]||'+ NEW TEAM')],
     cpu:[m===1?'PITCHER':m===2?'P2':'CPU',AT[MENU.cpu]],inn:['INNINGS',INN[lk?SEA.inn:MENU.inn]],bat:['YOU BAT',MENU.bat?'2ND (HOME)':'1ST (AWAY)'],
-    fld:['FIELDING',MENU.fld?'MANUAL':'AUTO'],park:['PARK',PARKS[MENU.park]],time:['TIME',MENU.time?'DAY':'NIGHT'],wind:['WIND',MENU.wind?'WINDY':'CALM'],net:['ONLINE',['HOST A GAME','JOIN A GAME','FIND A MATCH'][MENU.net]],ntype:['PLAY',MENU.ntype?'HR DERBY':'GAME'],sea:['SEASON',SEA&&SEA.g<SEA.sched.length?(MENU.sea?'START NEW':'CONTINUE '+(SEA.g+1)+'/'+SEA.sched.length):'NEW']};
+    fld:['FIELDING',MENU.fld?'MANUAL':'AUTO'],park:['PARK',PARKS[MENU.park]],lb:['LEADERS',LB_URL?'VIEW TOP 10':'OFFLINE'],time:['TIME',MENU.time?'DAY':'NIGHT'],wind:['WIND',MENU.wind?'WINDY':'CALM'],net:['ONLINE',['HOST A GAME','JOIN A GAME','FIND A MATCH'][MENU.net]],ntype:['PLAY',MENU.ntype?'HR DERBY':'GAME'],sea:['SEASON',SEA&&SEA.g<SEA.sched.length?(MENU.sea?'START NEW':'CONTINUE '+(SEA.g+1)+'/'+SEA.sched.length):'NEW']};
   const V=['park','time','wind'];
   if(m===4) return [['mode',...R.mode],['ach','UNLOCKED',achCount()+' OF '+ACHS.length]];
-  const keys=m===0?['mode','lvl','you','cpu','inn','bat','fld',...V]:m===1?['mode','lvl','you','cpu',...V]:m===2?(MENU.net===1?['mode','net','you']:MENU.ntype?['mode','net','ntype','you',...V]:['mode','net','ntype','you','inn','bat','fld',...V]):['mode','sea','lvl','you','inn','fld',...V];
+  const keys=m===0?['mode','lvl','you','cpu','inn','bat','fld',...V]:m===1?['mode','lvl','you','cpu',...V,'lb']:m===2?(MENU.net===1?['mode','net','you']:MENU.ntype?['mode','net','ntype','you',...V]:['mode','net','ntype','you','inn','bat','fld',...V]):['mode','sea','lvl','you','inn','fld',...V];
   return keys.map(k=>[k,...R[k]]);
 }
 function updateTitle(dt){
@@ -2181,6 +1959,7 @@ function updateTitle(dt){
   const L=allTeams(),you=L[MENU.you];
   if(key==='you'&&!locked&&took('b')){ SFX.blip(); openBuilder(you&&you.custom?you.saved:null); return; }
   if(!you&&!locked&&MENU.mode!==4&&(took('start')||took('a'))){ SFX.blip(); openBuilder(null); return; }
+  if(key==='lb'&&(took('a')||took('start'))){ if(LB_URL){ SFX.blip(); openLbView(); } return; }
   if(MENU.mode===4&&(took('start')||took('a'))){ SFX.blip(); saveSettings(); mode='ach'; ACHV.sel=0; return; }
   if(took('start')||took('a')){ SFX.score(); saveSettings();
     if(MENU.mode===3){ if(!locked) newSeason(); toSeason(); return; }
@@ -2547,6 +2326,11 @@ function lbStart(){
     if(d.hr>0&&(top.length<10||d.hr>top[top.length-1].hr||longOk)){ const ini=(SET.ini||'AAA').padEnd(3,'A'); lb.ent={ch:[...ini].map(c=>Math.max(0,LETTERS.indexOf(c))),pos:0}; }
   }).catch(()=>{ lb.err=true; });
 }
+// the leaderboard on its own, from the title menu (HR DERBY > LEADERBOARD)
+function openLbView(){
+  G={lbview:true,derby:{hr:-1,long:-1},lb:{top:null,long:[],err:false},overPg:1}; mode='lbview';
+  Promise.all([lbCall('/top'),lbCall('/long').catch(()=>[])]).then(([top,long])=>{ if(G&&G.lbview){ G.lb.top=top; G.lb.long=long; } }).catch(()=>{ if(G&&G.lbview) G.lb.err=true; });
+}
 function lbSubmit(){
   const lb=G.lb,n=lb.ent.ch.map(i=>LETTERS[i]).join(''); lb.ent=null; lb.sending=true; SET.ini=n; saveSettings();
   lbCall('/score',{n,hr:G.derby.hr,ft:G.derby.long||0,lvl:LVL.indexOf(G.lv)}).then(top=>{ lb.top=top; lb.sending=false; lb.mine=n; G.overPg=1; SFX.score(); return lbCall('/long').then(l=>{ lb.long=l; }); })
@@ -2562,7 +2346,7 @@ function updateLbEntry(){
 function drawLb(){
   const lb=G.lb;
   if(G.overPg===2){ bigText('LONGEST HR',128,24,16,'#fff6d0','#f4b13a'); panel(36,52,184,134);
-    tiny('<  BACK    PRESS START',128,200,C.dim,'center');
+    tiny(G.lbview?'< > MOST HR / LONGEST HR    B BACK':'<  BACK    PRESS START',128,200,C.dim,'center');
     if(!lb.long||!lb.long.length){ txt('NO HOMERS YET',128,110,C.dim,'center'); return; }
     lb.long.forEach((r,i)=>{ const y=59+i*12.5,me=r.n===lb.mine&&r.ft===G.derby.long;
       txt(String(i+1).padStart(2),48,y,C.dim); txt(r.n,76,y,me?C.yellow:C.text); txt(r.ft+' FT',178,y,C.yellow,'right'); tiny(['ROOKIE','PRO','ALL-STAR'][r.lvl]||'',212,y+2,C.dim,'right'); });
@@ -2571,7 +2355,7 @@ function drawLb(){
   panel(36,52,184,134);
   if(lb.err) { txt('OFFLINE',128,110,C.dim,'center'); return; }
   if(!lb.top) { txt('LOADING...',128,110,C.dim,'center'); return; }
-  tiny('<  BACK    PRESS START',128,200,C.dim,'center');
+  tiny(G.lbview?'< > MOST HR / LONGEST HR    B BACK':'<  BACK    PRESS START',128,200,C.dim,'center');
   if(!lb.top.length) txt('NO SCORES YET',128,110,C.dim,'center');
   lb.top.forEach((r,i)=>{ const y=59+i*12.5,me=r.n===lb.mine&&r.hr===G.derby.hr;
     txt(String(i+1).padStart(2),48,y,C.dim); txt(r.n,76,y,me?C.yellow:C.text); txt(String(r.hr),150,y,C.yellow,'right'); tiny(['ROOKIE','PRO','ALL-STAR'][r.lvl]||'',208,y+2,C.dim,'right'); });
@@ -2678,6 +2462,7 @@ function update(dt){
   if(mode==='title') updateTitle(dt);
   else if(mode==='season'){ if(!SEA) toTitle(); else updateSeason(); }
   else if(mode==='ach') updateAch();
+  else if(mode==='lbview'){ if(took('left')||took('right')){ G.overPg=3-G.overPg; SFX.blip(); } if(took('b')||took('start')||took('a')){ SFX.blip(); G=null; mode='title'; titleIdle=0; } }
   else if(mode==='play'){
     if(G.demo){ if(anyTook()){ toTitle(); clearPressed(); return; } }
     else if(took('start')||ptook('start')) paused=!paused;
@@ -2710,6 +2495,7 @@ function draw(){
   if(mode==='title'||mode==='build') drawTitle();
   else if(mode==='season') drawSeason();
   else if(mode==='ach') drawAch();
+  else if(mode==='lbview'){ ctx.drawImage(bgPitch,0,0,W,H); ctx.fillStyle='rgba(6,5,12,.8)'; ctx.fillRect(0,0,W,H); drawLb(); }
   else if(mode==='lobby') drawLobby();
   else if(mode==='over') drawOver();
   else { if(G.phase==='field'&&F) drawField(); else if(G.phase==='streak'&&ST) drawStreak(); else drawPitch(); drawHUD(); }
@@ -2731,11 +2517,13 @@ function hint(){
   else if(mode==='lobby'&&NET.match&&!NET.err) h=`Matchmaking: the game starts as soon as someone joins · ${L.B} leave`;
   else if(mode==='lobby') h=NET.host?(NET.oppTeam?`${L.S} to play · ${L.B} leave`:'Send your friend the game code · '+L.B+' to leave'):NET.guest?`Waiting for the host to start · ${L.B} leave`:`Enter the code from your friend's screen · ${L.B} back`;
   else if(mode==='ach') h=`${L.ud} scroll · ${L.B} back to the menu`;
+  else if(mode==='lbview') h=`${L.lr} most homers / longest homers · ${L.B} back to the menu`;
   else if(mode==='season') h=`${L.A} play the next game · ${L.lr} standings and stats · ${L.B} menu`;
   else if(mode==='title'){ const yt=allTeams()[MENU.you],rk=(menuRows()[MENU.row]||[])[0];
     h=rk==='net'&&MENU.net===2?'FIND A MATCH: get paired with anyone else looking for a game right now.':rk==='mode'&&MENU.mode===4?`TROPHIES: ${achCount()} of ${ACHS.length} unlocked. ${L.S} to see them all.`:rk==='mode'?(MENU.mode===2?'2 PLAYER: online, each player on their own phone or laptop. One hosts, the other joins with the code.':MENU.mode===3?'SEASON: 9 games against 3 teams, with standings and season stats.':`${L.lr} change mode · ${L.S} to play`)
       :rk==='park'?'WELLS FARM: a tree-farm ballpark with The Pines coffee stand and the big red barn past the fence.'
       :rk==='time'?'DAY or NIGHT game (at night the farm trees light up).'
+      :rk==='lb'?(LB_URL?`${L.A} to see the top 10 derby scores and the longest homers`:'The leaderboard needs the game server (worker/).')
       :rk==='wind'?'WINDY: a random wind each game. Blowing out carries fly balls farther; blowing in knocks them down.'
       :rk==='fld'?'MANUAL: steer the fielder with the d-pad, then direction + A to throw (▶ 1st ▲ 2nd ◀ 3rd ▼ home).'
       :rk==='you'&&!seaLocked()?(!yt?`${L.A} to build a new team`:yt.custom?`${L.lr} pick a team · ${L.B} edit this team · ${L.S} to play`:`${L.lr} pick a team · ${L.B} build a new team · ${L.S} to play`)

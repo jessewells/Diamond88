@@ -866,13 +866,13 @@ function drawCatcher(t,skin){
 const PIT_PX=.73;   // game pixels per pitcher art pixel
 function batFrame(phase,bunt){ return bunt?'bunt':phase<=0?'stance':phase<.22?'load':phase<.5?'contact':phase<.72?'extend':'follow'; }
 let batHead=[0,0];
-// the batter art at BATK2 game px per art pixel; his feet sit where the contact frame's bat row meets the pitch (2.6 ft)
+// the batter art, scaled for how deep he stands in the box; his feet sit where the contact frame's bat row meets the pitch (2.6 ft)
 // he stands in the box a little behind the plate's front edge; his scale comes from that depth so the contact bat still lands on the pitch
-const BAT_FEET=18,BAT_DEPTH=-1.2,BATK2=(pp(0,BAT_DEPTH,0)[1]-pp(0,0,2.6)[1])/(ART.bat.contact.length-BAT_ROW);
+const BAT_FEET=18,BAT_DEPTH=-1.2,batK=d=>(pp(0,d,0)[1]-pp(0,0,2.6)[1])/(ART.bat.contact.length-BAT_ROW);
 // how far (art px) from his feet to the bat's barrel at contact: that spot sits over the plate, which puts him in the box
 const BAT_REACH=(()=>{ let a=0,b=0; ART.bat.contact.forEach(r=>{ const m=r.match(/[Tt]{8,}/); if(m&&m[0].length>b-a){ a=m.index; b=a+m[0].length; } }); return a+(b-a)*.95-BAT_FEET; })();
-function drawBatter(t,skin,hb,off,phase,bunt,num){
-  const c=batterSprite(t,skin,batFrame(phase,bunt),hb<0,num),k=BATK2,sx=128-hb*BAT_REACH*k+off*19.8,sy=pp(0,BAT_DEPTH,0)[1];
+function drawBatter(t,skin,hb,off,phase,bunt,num,dep=0){
+  const d=BAT_DEPTH+dep,k=batK(d),c=batterSprite(t,skin,batFrame(phase,bunt),hb<0,num),sx=128-hb*BAT_REACH*k+off*pp(0,d)[2],sy=pp(0,d,0)[1];
   const fx=hb<0?c.aw-1-BAT_FEET:BAT_FEET;
   ctx.imageSmoothingEnabled=false; ctx.drawImage(c,snap(sx-(fx+1)*k),snap(sy-(c.ah+1)*k),c.width*k,c.height*k);
   batHead=[sx+(hb<0?-1:1)*2*k,sy-44*k];
@@ -1015,7 +1015,7 @@ function newGame(you,cpu,innings,batSecond,demo,opts={}){
   const L=allTeams(),cl=t=>({...t,pitcher:t.staff[0],lineup:t.lineup.slice(),bench:(t.bench||[]).slice()});
   const T=x=>typeof x==='object'?x:L[x],away=cl(T(batSecond?cpu:you)),home=cl(T(batSecond?you:cpu));
   G={teams:[away,home],human:demo?-1:(batSecond?1:0),innings,inning:1,half:0,score:[0,0],line:[[0],[]],hits:[0,0],
-     outs:0,balls:0,strikes:0,bases:[null,null,null],ab:[0,0],phase:'pitch',banner:null,demo,batOff:0,pa:0,streakAt:Math.random()<.3?6+((Math.random()*24)|0):-1};
+     outs:0,balls:0,strikes:0,bases:[null,null,null],ab:[0,0],phase:'pitch',banner:null,demo,batOff:0,batDep:0,pa:0,streakAt:Math.random()<.3?6+((Math.random()*24)|0):-1};
   G.lv=LVL[opts.vs?1:opts.lv===undefined?1:opts.lv]; G.kc=[0,0]; G.down=[0,0]; G.fb=null; G.overPg=0; G.pen=false; G.benchUI=null;
   G.vs=!!opts.vs; if(G.vs) G.streakAt=-1; G.season=!!opts.season; G.manual=!!opts.manual;
   G.hum=G.vs?[true,true]:[G.human===0,G.human===1];
@@ -1092,7 +1092,7 @@ function cpuPinch(){
 function banner(text,sub,then,t=1.6,col){ G.banner={text,sub,then,t,T:t,col}; }
 function addRuns(n){ G.score[G.half]+=n; G.line[G.half][G.inning-1]=(G.line[G.half][G.inning-1]||0)+n;
   for(const s of [0,1]) G.down[s]=Math.max(G.down[s]||0,G.score[1-s]-G.score[s]); }
-function startAtBat(){ G.balls=0; G.strikes=0; G.batOff=0; G.pen=false; G.benchUI=null; newPitch(); cpuBullpen(); if(!G.banner) cpuPinch(); if(G.pa++===G.streakAt) startStreak(); else if(!G.demo&&!G.derby) crowdMoment(); }
+function startAtBat(){ G.balls=0; G.strikes=0; G.batOff=0; G.batDep=0; G.pen=false; G.benchUI=null; newPitch(); cpuBullpen(); if(!G.banner) cpuPinch(); if(G.pa++===G.streakAt) startStreak(); else if(!G.demo&&!G.derby) crowdMoment(); }
 // the home crowd: CHARGE or a LET'S GO chant with their runners in scoring position, DE-FENSE when the visitors threaten,
 // and otherwise the home batter's walk-up music
 function crowdMoment(){
@@ -1130,7 +1130,7 @@ function hitByPitch(){ P.steal=null; P.state='after'; P.t=0; P.hbp=true; P.msg='
 function newPitch(){
   const b=curBatter();
   P={state:'ready',t:0,wait:humanPitching()?0:rand(.9,1.6),startX:0,aimX:0,ballX:0,vx:0,ax:0,T:1,type:'',hb:handOf(b),
-     swing:null,swingT:-1,resolved:false,cpuSwingAt:null,cpuOff:0,cpuBunt:false,off:humanBatting()?G.batOff:0,msg:null,msgT:0,next:null,mph:0};
+     swing:null,swingT:-1,resolved:false,cpuSwingAt:null,cpuOff:0,cpuBunt:false,off:humanBatting()?G.batOff:0,dep:humanBatting()?G.batDep:0,msg:null,msgT:0,next:null,mph:0};
 }
 function afterAB(){ G.ab[G.half]++; if(G.outs>=3) endHalf(); else if(!checkWalkoff()) startAtBat(); }
 function checkWalkoff(){
@@ -1161,6 +1161,9 @@ function walk(){
 function moveBatter(dt){
   const v=(keys.right?1:0)-(keys.left?1:0);
   G.batOff=clamp(G.batOff+v*2.6*dt,P.hb>0?-1.1:-.5,P.hb>0?.5:1.1); P.off=G.batOff;   // inner foot stops at the box line
+  // up/down step toward the pitcher or back toward the catcher (ft); with runners on, up/down are steal/cancel instead
+  const w=G.bases.some(Boolean)?0:(keys.up?1:0)-(keys.down?1:0);
+  G.batDep=clamp(G.batDep+w*2.6*dt,-1.4,1.6); P.dep=G.batDep;   // front and back feet stay inside the chalk
 }
 function cpuChoosePitch(){
   const pit=effPit(),r=Math.random();
@@ -1702,9 +1705,9 @@ function drawPitch(){
   if(!front) drawBall();
   const bt=curBatter(),phase=P.swingT<0?0:Math.min(1,P.swingT/.2);
   const num=jerseyNo(bt[0]);
-  if(P.hbp){ const k=Math.min(1,P.t*4); drawBatter(off,skinOf(bt[0]),P.hb,P.off-P.hb*.6*k,0,false,num);
+  if(P.hbp){ const k=Math.min(1,P.t*4); drawBatter(off,skinOf(bt[0]),P.hb,P.off-P.hb*.6*k,0,false,num,P.dep||0);
     for(let i=0;i<3;i++){ const a=P.t*6+i*2.1; drawStar(batHead[0]+Math.cos(a)*12,batHead[1]-8+Math.sin(a)*3); } }
-  else drawBatter(off,skinOf(bt[0]),P.hb,P.off,P.swing&&P.swing.bunt?.42:phase,!!(P.swing&&P.swing.bunt),num);
+  else drawBatter(off,skinOf(bt[0]),P.hb,P.off,P.swing&&P.swing.bunt?.42:phase,!!(P.swing&&P.swing.bunt),num,P.dep||0);
   drawCatcher(def,skinOf(def.lineup[1][0]));
   if(front) drawBall();
   if(P.state==='contact'&&bq){ const a=P.t*9;
@@ -2542,7 +2545,7 @@ function hint(){
   else if(G.phase==='field'&&G.manual&&humanPitching()&&!humanBatting()) h=`Steer the fielder · direction + ${L.A} throw (${L.r} 1st ${L.up} 2nd ${L.l} 3rd ${L.dn} home) · direction + ${L.B} run it there`;
   else if(G.phase==='field') h=humanBatting()?`${L.A} send runners an extra base · ${L.B} hold them up`:'Your fielders play the ball and throw on their own';
   else if(humanBatting()&&G.balls===0&&G.strikes===0&&P&&P.state==='ready'&&G.teams[G.half].bench.length) h=`${L.lr} step in the box · ${L.A} swing · ${L.B} pinch hitter (before the first pitch)`;
-  else if(humanBatting()) h=G.bases.some(Boolean)?`${L.lr} step in the box · ${L.A} swing · ${L.B} bunt · ${L.up} steal (${L.dn} cancel)`:`${L.lr} step in the box to line up the pitch · ${L.A} swing · ${L.B} bunt`;
+  else if(humanBatting()) h=G.bases.some(Boolean)?`${L.lr} step in the box · ${L.A} swing · ${L.B} bunt · ${L.up} steal (${L.dn} cancel)`:`${L.lr}${L.ud} step in the box to line up the pitch · ${L.A} swing · ${L.B} bunt`;
   else if(G.pen) h=`${L.A} bring in the reliever · ${L.B} keep your pitcher`;
   else h=P&&P.state==='flight'?`Hold ${L.l} or ${L.r} to break the pitch`
     :fatigue(armNow())>=.6&&nextArm(1-G.half)?`Your pitcher is tiring. ${L.B} for the bullpen · ${L.A} pitch`

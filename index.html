@@ -1338,7 +1338,7 @@ function judgeFair(tr){
 }
 const throwSpd=i=>i>=6?96:i===1?108:115;
 // long throws lose speed and arc (or take a hop), so time grows faster than distance
-const throwT=(i,d)=>d/throwSpd(i)*(1+d/1300);
+const throwT=(i,d)=>d/throwSpd(i)*(1+Math.max(0,d-150)/700);
 // an outfielder picking a ball up off the grass has to stop, gather and set his feet before he can throw
 const gatherT=i=>i>=6?.7:.25;
 function mkRunner(info,base,isB){ return {info,pos:base,origin:base,target:base,spd:21+info[4]*7,isB,out:false,scored:false,delay:isB?.3:0}; }

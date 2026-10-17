@@ -1028,6 +1028,9 @@ function newGame(you,cpu,innings,batSecond,demo,opts={}){
   // 2-player derby: players alternate turns of 5 outs, 2 rounds; P1 (side 1) leads off; ties go to 3-out swing-offs
   if(G.derby&&G.vs){ const t=G.derby.two={hr:[0,0],turn:0,order:[1,0],round:1,rounds:2,per:5,swingoff:0};
     G.derby.max=t.per; G.hum=[false,true]; }
+  // derby slugger: you pick him (cursor starts on your biggest power bat); a 2-player derby sends each side's best power bat
+  const slug=t=>t.lineup.reduce((b,p,i,a)=>p[2]>a[b][2]?i:b,0);
+  if(G.derby){ G.ab=[slug(G.teams[0]),slug(G.teams[1])]; if(!G.vs&&!demo) G.derby.pick={sel:G.ab[1]}; }
   const v=opts.venue||(demo?{park:VEN.park,day:VEN.day,mph:0,dir:0}:venueFromMenu());
   G.venue=v; setVenue(v.park,v.day); setWind(v);
   mode='play'; paused=false; F=null;
@@ -1252,6 +1255,12 @@ function updatePitch(dt){
   if(P.swingT>=0) P.swingT+=dt;
   if(P.rel!==undefined) P.rel+=dt;
   const hBat=humanBatting(),hPit=humanPitching();
+  if(G.derby&&G.derby.pick){   // derby: ▲▼ choose your slugger, A to step in
+    const pk=G.derby.pick,n=G.teams[G.half].lineup.length;
+    if(took('up')){ pk.sel=(pk.sel+n-1)%n; SFX.blip(); } if(took('down')){ pk.sel=(pk.sel+1)%n; SFX.blip(); }
+    if(took('a')){ G.ab[G.half]=pk.sel; G.derby.pick=null; SFX.blip(); startAtBat(); }
+    return;
+  }
   if(G.benchUI){   // batter's bench: ▲▼ pick, A send him up, B close
     const bu=G.benchUI,n=G.teams[G.half].bench.length;
     if(took('up')){ bu.sel=(bu.sel+n-1)%n; SFX.blip(); } if(took('down')){ bu.sel=(bu.sel+1)%n; SFX.blip(); }
@@ -1790,6 +1799,12 @@ function drawPitch(){
     ctx.strokeStyle='rgba(246,242,230,.7)'; ctx.lineWidth=1; ctx.setLineDash([2,2]); ctx.strokeRect(snap(a[0]),snap(a[1]),snap(b[0]-a[0]),snap(b[1]-a[1])); ctx.setLineDash([]);
     ctx.fillStyle=ART_INK; ctx.beginPath(); ctx.arc(dot[0],dot[1],4,0,7); ctx.fill();
     ctx.fillStyle=inZ?'#f4c84a':'#9ad7ff'; ctx.beginPath(); ctx.arc(dot[0],dot[1],3,0,7); ctx.fill(); }
+  if(G.derby&&G.derby.pick&&!G.banner){ const t=G.teams[G.half],pk=G.derby.pick;
+    panel(26,30,204,40+t.lineup.length*13); txt('PICK YOUR SLUGGER',128,35,C.yellow,'center');
+    t.lineup.forEach((p,i)=>{ const y=50+i*13,sel=i===pk.sel; if(sel){ ctx.fillStyle='rgba(244,200,74,.14)'; ctx.fillRect(28,y-3,200,12); }
+      txt(p[0],36,y,sel?C.yellow:C.text); tiny(p[1],132,y+2,C.dim); tiny('POW',150,y+2,C.dim);
+      for(let k=0;k<5;k++){ ctx.fillStyle=k<Math.round(p[2]*5)?'#f4c84a':'#2e2838'; ctx.fillRect(172+k*10,y+1,8,5); } });
+    txt(kbMode?'X STEP IN':'A STEP IN',128,56+t.lineup.length*13,C.text,'center'); }
   if(G.benchUI){ const t=G.teams[G.half],cur=curBatter(),bu=G.benchUI;
     panel(30,52,196,44+t.bench.length*14); txt('BENCH',128,57,C.yellow,'center');
     tiny('BATTING NOW: '+cur[0],128,68,C.dim,'center');
@@ -2596,6 +2611,7 @@ function hint(){
   else if(G.vs&&G.phase==='pitch'&&!G.derby&&G.pl[1-G.half]===NET.me&&!(P&&P.state==='flight')) h=`You're pitching · ${L.lr} aim · ${L.A} pitch (hold ${L.up} heater, ${L.dn} change-up) · ${L.B} bullpen`;
   else if(G.vs&&G.phase==='pitch'&&!G.derby&&G.pl[1-G.half]===NET.me) h=`Hold ${L.l} or ${L.r} to break the pitch`;
   else if(G.vs&&G.phase==='field'&&G.pl[G.half]!==NET.me&&!G.manual) h='Your fielders play the ball and throw on their own';
+  else if(G&&G.derby&&G.derby.pick) h=`${L.ud} pick your slugger (more POW = longer homers) · ${L.A} step in`;
   else if(G.benchUI) h=`${L.ud} pick a pinch hitter · ${L.A} send him up · ${L.B} back`;
   else if(G.phase==='streak') h=`A streaker is loose! Press ${L.A} to skip.`;
   else if(G.derby&&G.derby.two&&G.pl[G.half]!==NET.me) h=`${G.teams[G.half].name} is batting. You're up after ${G.derby.max-G.derby.outs} more out${G.derby.max-G.derby.outs===1?'':'s'}.`;

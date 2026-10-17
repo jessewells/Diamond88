@@ -1385,7 +1385,8 @@ function startField(c){
     if(bf>=0){ F.catcher=bf; F.catchT=bt; F.catchPt={x:pts[bj].x,y:pts[bj].y}; F.air=tr.fc<0||bj<tr.fc;
       fl[bf].tx=F.catchPt.x; fl[bf].ty=F.catchPt.y; }
   }
-  const used=new Set([F.catcher]),opts={4:[1,0],1:[2,3,0],3:[5,4,0],2:[4,3,0]};
+  // who covers each bag, in order of preference; when the first baseman goes for the ball the pitcher covers first
+  const used=new Set([F.catcher]),opts={4:[1,0],1:[2,0,3],3:[5,4,0],2:[4,3,0]};
   for(const b of [4,1,3,2]) for(const i of opts[b]) if(!used.has(i)){F.cover[b]=i; used.add(i); break;}
   if(F.fair||F.air) for(const b in F.cover){ const f=fl[F.cover[b]]; f.tx=BASE[b][0]; f.ty=BASE[b][1]+(b==4?-2:0); }
   if(F.catchPt) for(let i=6;i<9;i++) if(i!==F.catcher){ const f=fl[i]; f.tx=f.x+(F.catchPt.x-f.x)*.45; f.ty=f.y+(F.catchPt.y-f.y)*.45; }
